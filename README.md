@@ -5,7 +5,7 @@
 1. Install and start Docker Desktop.
 2. Extract this folder, open PowerShell in it, and run `docker compose up --build -d`.
 3. Open http://localhost:8080 and sign in as `admin` with password `change-me-now`.
-4. In Admin → Event Selection, choose a year, filter by New England or a state/province, and choose an event. The list loads from the public FIRST event page and is cached locally. The event selector does not import the team list or match schedule yet; import `sample-schedule.csv` to try the match table.
+4. In Admin → Event Selection, choose a year, select Districts, Regionals, or Worlds, then choose an event. Districts also have a FIRST district dropdown (such as New England). The list loads from the public FIRST event page and is cached locally. The event selector does not import the team list or match schedule yet; import `sample-schedule.csv` to try the match table.
 5. Create scout accounts, then open Matches and click a team number. Try saving a draft and submitting. Open Teams for pit notes and the pick list for strategy.
 6. Stop with `docker compose down`. Data persists in the Docker volume. **Do not use `docker compose down -v` unless you intend to erase it.**
 
