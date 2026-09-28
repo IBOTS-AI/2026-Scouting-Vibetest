@@ -5,4 +5,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends libpq-dev \
 RUN printf 'upload_max_filesize=4M\npost_max_size=5M\n' > /usr/local/etc/php/conf.d/scouting-uploads.ini
 COPY public/ /var/www/html/
 COPY sql/ /var/www/sql/
+COPY fixtures/ /var/www/fixtures/
 RUN chown -R www-data:www-data /var/www/html
