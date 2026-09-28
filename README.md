@@ -15,7 +15,8 @@ Download the current [`update-windows.ps1`](update-windows.ps1) into the same fo
 
 ```powershell
 $root = 'C:\Users\IBOTS\Documents\2026-Scouting-Vibetest-main\2026-Scouting-Vibetest-main'
-curl.exe -fL 'https://raw.githubusercontent.com/IBOTS-AI/2026-Scouting-Vibetest/main/update-windows.ps1' -o "$root\update-windows.ps1"
+$stamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+curl.exe -fL "https://raw.githubusercontent.com/IBOTS-AI/2026-Scouting-Vibetest/main/update-windows.ps1?v=$stamp" -o "$root\update-windows.ps1"
 if ($LASTEXITCODE -ne 0) { throw 'Could not download the update script.' }
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$root\update-windows.ps1"
 ```
