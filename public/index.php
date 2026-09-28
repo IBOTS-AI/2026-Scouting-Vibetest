@@ -120,7 +120,7 @@ function pathWidget(array $strokes,bool $editable): void {
  if($editable)echo '<input type="hidden" name="auto_path" id="autoPathInput" value="'.h(json_encode($strokes)).'"><div class="path-actions"><button type="button" id="pathUndo">Undo last stroke</button><button type="button" id="pathClear">Clear path</button></div>';
  echo '</section>';
 }
-function page(string $title,bool $wide=false): void { echo '<!doctype html><html lang="en"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h($title).' · Scouting</title><link rel="stylesheet" href="/style.css?v=6"><header><strong>2370 · Scouting</strong><nav><a href="/?p=home">Dashboard</a><a href="/?p=matches">Matches</a><a href="/?p=teams">Teams</a><a href="/?p=strategy">Strategy</a><a href="/?p=picks">Pick list</a><a href="/?p=admin">Admin</a><a href="/?p=logout">Log out</a></nav></header><main'.($wide?' class="wide"':'').'><h1>'.h($title).'</h1>'; if(isset($_SESSION['flash'])) {echo '<aside class="'.h($_SESSION['flash_type']??'notice').'">'.h($_SESSION['flash']).'</aside>';unset($_SESSION['flash'],$_SESSION['flash_type']);} }
+function page(string $title,bool $wide=false): void { echo '<!doctype html><html lang="en"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h($title).' · Scouting</title><link rel="stylesheet" href="/style.css?v=7"><header><strong>2370 · Scouting</strong><nav><a href="/?p=home">Dashboard</a><a href="/?p=matches">Matches</a><a href="/?p=teams">Teams</a><a href="/?p=strategy">Strategy</a><a href="/?p=picks">Pick list</a><a href="/?p=admin">Admin</a><a href="/?p=logout">Log out</a></nav></header><main'.($wide?' class="wide"':'').'><h1>'.h($title).'</h1>'; if(isset($_SESSION['flash'])) {echo '<aside class="'.h($_SESSION['flash_type']??'notice').'">'.h($_SESSION['flash']).'</aside>';unset($_SESSION['flash'],$_SESSION['flash_type']);} }
 function endpage(): void {echo '</main></html>';}
 try { db(); } catch(Throwable $e) { http_response_code(503);exit('Database unavailable. Start Docker Compose and try again.'); }
 $p=$_GET['p']??'home';
@@ -358,6 +358,7 @@ elseif($p==='picks'){
    echo '<article class="pick-card'.($isPicked?' picked':'').'" data-team="'.h($num).'" data-picked="'.($isPicked?'1':'0').'"'.($editor&&!$isPicked?' draggable="true"':'').'><div class="pick-card-check">';
    if($editor)echo '<form method="post" action="/?p=pick_status">'.csrf().'<input type="hidden" name="team" value="'.h($num).'"><label title="Mark team picked"><input type="checkbox" name="picked" value="1" aria-label="Team '.h($num).' picked"'.($isPicked?' checked':'').' onchange="this.form.requestSubmit()"><span>Picked</span></label></form>';
    elseif($isPicked)echo '<span>✓ Picked</span>';
+   if($editor&&!$isPicked)echo '<button type="button" class="pick-drag" aria-label="Drag team '.h($num).' to reorder" title="Drag to reorder"><span aria-hidden="true">⋮⋮</span><small>DRAG</small></button>';
    echo '</div>';
    if($card['uploaded_at'])echo '<img class="pick-card-photo" src="/?p=robot_photo&n='.h($num).'&v='.rawurlencode($card['uploaded_at']).'" alt="Robot photo for team '.h($num).'" loading="lazy">';
    else echo '<div class="pick-card-photo placeholder">Robot photo</div>';
@@ -367,7 +368,7 @@ elseif($p==='picks'){
    if(($pitNotes[$num]??'')!=='')echo '<p class="pick-note"><b>Pit:</b> '.h($pitNotes[$num]).'</p>';
    if($latest!=='')echo '<p class="pick-note"><b>Latest match:</b> '.h($latest).'</p>';
    if($editor){
-    echo '<div class="pick-actions">';if(!$isPicked)echo '<button type="button" class="pick-drag" aria-label="Drag team '.h($num).' to reorder">☰ Drag</button>';
+    echo '<div class="pick-actions">';
     foreach(['up'=>'↑ Up','down'=>'↓ Down'] as $direction=>$label){$neighbor=$i+($direction==='up'?-1:1);$disabled=$neighbor<0||$neighbor>=count($cards)||picked($cards[$neighbor]['picked'])!==$isPicked;echo '<form method="post" action="/?p=pick_move">'.csrf().'<input type="hidden" name="team" value="'.h($num).'"><input type="hidden" name="direction" value="'.h($direction).'"><button'.($disabled?' disabled':'').'>'.h($label).'</button></form>';}
     echo '<details><summary>Edit pick note</summary><form method="post" action="/?p=pick_note">'.csrf().'<input type="hidden" name="team" value="'.h($num).'"><label>Note<input name="note" maxlength="1000" value="'.h($card['note']??'').'"></label><label><input type="checkbox" name="dnp"'.(picked($card['do_not_pick'])?' checked':'').'> Do not pick</label><button>Save note</button></form></details></div>';
    }
