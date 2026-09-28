@@ -356,8 +356,6 @@ elseif($p==='picks'){
    $entries=$byTeam[$num]??[];$metrics=[];
    foreach(['match_score'=>'Avg Match Score','auto_score'=>'Avg Autonomous','teleop_score'=>'Avg Teleop','defense_rating'=>'Avg Defensive Ability','defensive_vulnerability'=>'Avg Defensive Vulnerability'] as $key=>$label)$metrics[$label]=metricAverage($entries,$key,in_array($key,['defense_rating','defensive_vulnerability'],true)?5.0:null);
    echo '<article class="pick-card'.($isPicked?' picked':'').'" data-team="'.h($num).'" data-picked="'.($isPicked?'1':'0').'"'.($editor&&!$isPicked?' draggable="true"':'').'><div class="pick-card-check">';
-   if($editor)echo '<form method="post" action="/?p=pick_status">'.csrf().'<input type="hidden" name="team" value="'.h($num).'"><label title="Mark team picked"><input type="checkbox" name="picked" value="1" aria-label="Team '.h($num).' picked"'.($isPicked?' checked':'').' onchange="this.form.requestSubmit()"><span>Picked</span></label></form>';
-   elseif($isPicked)echo '<span>✓ Picked</span>';
    if($editor&&!$isPicked)echo '<button type="button" class="pick-drag" aria-label="Drag team '.h($num).' to reorder" title="Drag to reorder; arrow keys also work"><span aria-hidden="true">⋮</span></button>';
    echo '</div>';
    if($card['uploaded_at'])echo '<img class="pick-card-photo" src="/?p=robot_photo&n='.h($num).'&v='.rawurlencode($card['uploaded_at']).'" alt="Robot photo for team '.h($num).'" loading="lazy">';
@@ -365,9 +363,11 @@ elseif($p==='picks'){
    echo '<div class="pick-card-content"><div class="pick-card-title"><h2><a href="/?p=team&n='.h($num).'">'.h($num).' · '.h($card['name']?:'Unnamed team').'</a></h2><span>'.($isPicked?'Picked':'Pick #'.h($position)).'</span></div>';
    echo '<div class="pick-stats">';
    foreach($metrics as $label=>$value)echo '<span class="pick-stat"><span>'.h($label).':</span><strong>'.h($value===null?'—':number_format($value,1)).'</strong></span>';
-   echo '<span class="pick-stat"><span>Reports:</span><strong>'.h(count($entries)).'</strong></span></div></div><div class="pick-card-dnp">';
+   echo '<span class="pick-stat"><span>Reports:</span><strong>'.h(count($entries)).'</strong></span></div></div><div class="pick-card-flags">';
+   if($editor)echo '<form method="post" action="/?p=pick_status">'.csrf().'<input type="hidden" name="team" value="'.h($num).'"><label title="Mark team picked"><input type="checkbox" name="picked" value="1" aria-label="Team '.h($num).' picked"'.($isPicked?' checked':'').' onchange="this.form.requestSubmit()"><span>Picked</span></label></form>';
+   else echo '<span>'.($isPicked?'✓ Picked':'').'</span>';
    if($editor)echo '<form method="post" action="/?p=pick_dnp">'.csrf().'<input type="hidden" name="team" value="'.h($num).'"><label><input type="checkbox" name="dnp" value="1" aria-label="Do Not Pick team '.h($num).'"'.(picked($card['do_not_pick'])?' checked':'').' onchange="this.form.requestSubmit()"><span>Do Not Pick</span></label></form>';
-   elseif(picked($card['do_not_pick']))echo '<span>Do Not Pick</span>';
+   else echo '<span>'.(picked($card['do_not_pick'])?'Do Not Pick':'').'</span>';
    echo '</div></article>';
   }
   echo '</div>';
