@@ -8,7 +8,7 @@
     document.getElementById('pickOrder').value = JSON.stringify(order());
     form.requestSubmit();
   };
-  const unpicked = card => card && card.classList.contains('pick-card') && card.dataset.picked === '0';
+  const unpicked = card => card && card.classList.contains('pick-card') && card.dataset.picked === '0' && card.dataset.dnp === '0';
   const targetAt = (element, y) => {
     const direct = element?.closest?.('.pick-card');
     if (unpicked(direct)) return direct;
