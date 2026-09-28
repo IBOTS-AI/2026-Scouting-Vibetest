@@ -3,7 +3,8 @@
 ## Run on Windows with Docker Desktop
 
 1. Install and start Docker Desktop.
-2. Clone the repository or extract the downloaded ZIP. In PowerShell, change into the folder that contains `compose.yaml` (usually `2026-Scouting-Vibetest` for a GitHub download, or `scouting-app` for the ZIP shared in chat). Check with `Get-ChildItem compose.yaml` before running Docker.\n3. Run `docker compose up --build -d` in that folder.
+2. Clone the repository or extract the downloaded ZIP. In PowerShell, change into the folder that contains `compose.yaml` (usually `2026-Scouting-Vibetest` for a GitHub download, or `scouting-app` for the ZIP shared in chat). Check with `Get-ChildItem compose.yaml` before running Docker.
+3. Run `docker compose up --build -d` in that folder.
 4. Open http://localhost:8080 and sign in as `admin` with password `change-me-now`.
 5. In Admin, create an event (for example `2026 Test Event`, key `test2026`) and import `sample-schedule.csv`.
 6. Create scout accounts, then open Matches and click a team number. Try saving a draft and submitting. Open Teams for pit notes and the pick list for strategy.
