@@ -9,6 +9,19 @@
 5. Create scout accounts, then open Matches and click Scout in a team cell. Try drawing an autonomous path, saving a draft, and submitting. Open Teams for robot photo cards and Pit Scout forms, then Strategy for alliance plans and the pick list for selection order.
 6. Stop with `docker compose down`. Data persists in the Docker volume. **Do not use `docker compose down -v` unless you intend to erase it.**
 
+## Update an existing Windows installation
+
+Download the current [`update-windows.ps1`](update-windows.ps1) into the same folder as `compose.yaml`, then run it with PowerShell. It downloads the current application files from GitHub, retries transient download errors, rebuilds and recreates the web container, and compares the files inside that container to the downloaded files. A failed download stops the process with an explicit error. The database volume is retained.
+
+```powershell
+$root = 'C:\Users\IBOTS\Documents\2026-Scouting-Vibetest-main\2026-Scouting-Vibetest-main'
+curl.exe -fL 'https://raw.githubusercontent.com/IBOTS-AI/2026-Scouting-Vibetest/main/update-windows.ps1' -o "$root\update-windows.ps1"
+if ($LASTEXITCODE -ne 0) { throw 'Could not download the update script.' }
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$root\update-windows.ps1"
+```
+
+The page includes a content hash in each CSS and JavaScript URL, so the browser fetches a changed file after an update. If a normal update reports a container hash mismatch, rerun the script with `-CleanBuild` to rebuild Docker layers without cache.
+
 ## Current scope and limitations
 
 This is an early local prototype based on the scoping document. It uses PHP and PostgreSQL, stores drafts and corrections with an audit trail, and preserves submitted records when reimporting a schedule. CSV import accepts `match,r1,r2,r3,b1,b2,b3`. The supplied schedule is fictional test data.
