@@ -3,6 +3,7 @@
   if (!table) return;
   const body = table.tBodies[0];
   const filters = [...table.querySelectorAll('.column-filter')];
+  const status = document.getElementById('dashboardControlsStatus');
   let sortColumn = 0;
   let ascending = true;
   const numeric = new Set([0, 2, 3, 4, 5, 6]);
@@ -32,13 +33,16 @@
       const cmp = numeric.has(sortColumn) ? Number(av) - Number(bv) : av.localeCompare(bv);
       return (ascending ? 1 : -1) * cmp;
     });
+    let visible = 0;
     for (const row of rows) {
       row.hidden = filters.some(input => !accepts(row, input.value.trim(), Number(input.dataset.col)));
+      if (!row.hidden) visible++;
       body.append(row);
     }
     for (const button of table.querySelectorAll('.sort-head')) {
       button.closest('th').setAttribute('aria-sort', Number(button.dataset.col) === sortColumn ? (ascending ? 'ascending' : 'descending') : 'none');
     }
+    if (status) status.textContent = `${visible} of ${rows.length} teams shown. Sorting and filtering ready.`;
   }
   for (const input of filters) input.addEventListener('input', render);
   for (const button of table.querySelectorAll('.sort-head')) button.addEventListener('click', () => {
