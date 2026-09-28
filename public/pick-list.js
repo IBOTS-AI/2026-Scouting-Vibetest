@@ -9,11 +9,12 @@
     form.requestSubmit();
   };
   const unpicked = card => card && card.classList.contains('pick-card') && card.dataset.picked === '0' && card.dataset.dnp === '0';
-  const targetAt = (element, y) => {
+  const targetAt = (element, y, movingCard) => {
     const direct = element?.closest?.('.pick-card');
+    if (direct === movingCard) return null;
     if (unpicked(direct)) return direct;
-    const available = cards().filter(unpicked);
-    return available.reduce((best, card) => Math.abs(card.getBoundingClientRect().top - y) < Math.abs(best.getBoundingClientRect().top - y) ? card : best, available[0]);
+    const available = cards().filter(card => unpicked(card) && card !== movingCard);
+    return available.reduce((best, card) => Math.abs(card.getBoundingClientRect().top + card.getBoundingClientRect().height / 2 - y) < Math.abs(best.getBoundingClientRect().top + best.getBoundingClientRect().height / 2 - y) ? card : best, available[0] || null);
   };
   const move = (card, target, y) => {
     if (!unpicked(card) || !unpicked(target) || card === target) return;
@@ -22,26 +23,35 @@
   };
 
   // The entire card is draggable with a mouse. Keep links and controls clickable.
-  let mouseTarget = null, dragging = null, startingOrder = '';
+  let mouseTarget = null, dragging = null, startingOrder = '', dropped = false;
   list.addEventListener('pointerdown', event => { if (event.pointerType === 'mouse') mouseTarget = event.target; });
   list.addEventListener('dragstart', event => {
     const card = event.target.closest('.pick-card');
     if (!unpicked(card) || (mouseTarget?.closest('a,input,select,textarea,form,details,summary,button') && !mouseTarget.closest('.pick-drag'))) { event.preventDefault(); return; }
-    dragging = card;startingOrder = JSON.stringify(order());
+    dragging = card;startingOrder = JSON.stringify(order());dropped = false;
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', card.dataset.team);
     card.classList.add('dragging');
   });
   list.addEventListener('dragover', event => {
-    if (!dragging || !targetAt(event.target, event.clientY)) return;
+    if (!dragging) return;
     event.preventDefault();event.dataTransfer.dropEffect = 'move';
+    move(dragging, targetAt(event.target, event.clientY, dragging), event.clientY);
   });
   list.addEventListener('drop', event => {
     if (!dragging) return;
-    event.preventDefault();move(dragging, targetAt(event.target, event.clientY), event.clientY);
+    event.preventDefault();dropped = true;
+    move(dragging, targetAt(event.target, event.clientY, dragging), event.clientY);
     if (JSON.stringify(order()) !== startingOrder) save();
   });
-  list.addEventListener('dragend', () => { dragging?.classList.remove('dragging');dragging = null;mouseTarget = null; });
+  list.addEventListener('dragend', () => {
+    dragging?.classList.remove('dragging');
+    if (dragging && !dropped) {
+      const byTeam = new Map(cards().map(card => [Number(card.dataset.team), card]));
+      for (const team of JSON.parse(startingOrder)) list.appendChild(byTeam.get(team));
+    }
+    dragging = null;mouseTarget = null;
+  });
 
   // Pointer events on the handle also support touch and stylus without blocking page scroll.
   for (const handle of list.querySelectorAll('.pick-drag')) {
@@ -69,7 +79,7 @@
       event.preventDefault();
       if (event.clientY < 70) window.scrollBy(0, -18);
       if (event.clientY > window.innerHeight - 70) window.scrollBy(0, 18);
-      move(touchCard, targetAt(document.elementFromPoint(event.clientX, event.clientY), event.clientY), event.clientY);
+      move(touchCard, targetAt(document.elementFromPoint(event.clientX, event.clientY), event.clientY, touchCard), event.clientY);
     });
     const finish = () => {
       if (!touchCard) return;
