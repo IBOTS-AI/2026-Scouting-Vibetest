@@ -27,6 +27,8 @@ The match scouting form begins with an autonomous path canvas. Draw with a mouse
 
 The **Strategy** page lets admins, mentors, and drive team accounts save multiple event plans. Choose up to three distinct alliance partners, assign each a path color, select a partner to draw its route on the same field image, and add strategy notes. Saved plans remain available from the page’s list; other signed-in users may view them. The three drawing layers can be edited independently with Undo and Clear.
 
+The **Pick list** shows every team in a wide card with its robot photo, submitted match count, average match/autonomous/teleop scores, defensive ability, defensive vulnerability, pit notes, recent match notes, and pick note. Admin, mentor, and drive accounts can drag unpicked cards or use Up/Down buttons to save their order. Check **Picked** on the left to grey a card and move it to the bottom; uncheck it to return it to the available list. Pick notes and the separate Do not pick flag remain editable on each card.
+
 ## Try the 2026 WPI demo data
 
 Select **2026 → Districts → New England → NE District WPI Event** in Admin, then click **Select event**. In the Active event section, click **Load WPI demo data**. The app loads the bundled official WPI team list and 78 qualification matches (39 teams), then fills each match position with synthetic scouting reports. Autonomous points are randomized from 10–100, teleop from 20–400, the match score is their sum, and both defense ratings are 0–5. All scheduled teams appear in the Dashboard and Teams pages with populated match reports. These numbers are invented for display testing, not actual match results.
