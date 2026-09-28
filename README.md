@@ -20,3 +20,5 @@ Before real event use, change the initial admin password (currently done by crea
 Robot photos (JPEG, PNG, WebP up to 4 MB) are saved in the local PostgreSQL database and appear on team cards and profiles.
 
 The Admin page confirms the selected event and loaded record counts. The Matches table uses full page width, red and blue alliance columns, and a Scout button in each populated position.
+
+The full-width dashboard summarizes per-team averages from submitted match scouting entries. Scouts enter estimated team match, autonomous, and teleop points, plus defense and defensive vulnerability ratings (0–5). Each dashboard column can be sorted and filtered; numeric filters support comparisons and ranges. Red indicates the lower value observed at the event and blue the higher value; blank metrics have no submitted numeric observation.
