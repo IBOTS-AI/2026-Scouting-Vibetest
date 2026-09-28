@@ -214,7 +214,7 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
  }
  if($p==='upload_photo'&&$e) { $num=(int)($_POST['team']??0);$team=query('SELECT number FROM teams WHERE event_id=? AND number=?',[$e['id'],$num])->fetch(PDO::FETCH_ASSOC);if(!$team){http_response_code(404);exit('Team not found');}$upload=$_FILES['photo']??null;if(!$upload||$upload['error']!==UPLOAD_ERR_OK||$upload['size']>4*1024*1024||$upload['size']<1||!is_uploaded_file($upload['tmp_name'])){$_SESSION['flash']='Choose a JPEG, PNG, or WebP photo under 4 MB.';go('pit&n='.$num);} $details=@getimagesize($upload['tmp_name']);$mime=$details['mime']??'';if(!in_array($mime,['image/jpeg','image/png','image/webp'],true)){$_SESSION['flash']='This image format is not supported. Choose JPEG, PNG, or WebP.';go('pit&n='.$num);} $data=base64_encode(file_get_contents($upload['tmp_name']));query('INSERT INTO team_photos(event_id,team_number,mime,photo_base64) VALUES(?,?,?,?) ON CONFLICT(event_id,team_number) DO UPDATE SET mime=EXCLUDED.mime,photo_base64=EXCLUDED.photo_base64,uploaded_at=now()',[$e['id'],$num,$mime,$data]);$_SESSION['flash']='Robot photo saved.';go('pit&n='.$num);}
  if($p==='pit'&&$e) { $num=(int)($_POST['team']??0);if($num<1)exit('Invalid team');$data=[];foreach(['robot','drivetrain','dimensions','weight','mechanisms','scoring','autonomous','endgame','strategy','reliability','requirements','notes'] as $k)$data[$k]=trim((string)($_POST[$k]??''));query('INSERT INTO teams(event_id,number) VALUES(?,?) ON CONFLICT DO NOTHING',[$e['id'],$num]);$old=query('SELECT * FROM pit WHERE event_id=? AND team_number=?',[$e['id'],$num])->fetch(PDO::FETCH_ASSOC);$id=$old['id']??uuid();query('INSERT INTO pit(id,event_id,team_number,author_id,data) VALUES(?,?,?,?,?) ON CONFLICT(event_id,team_number) DO UPDATE SET data=EXCLUDED.data,author_id=EXCLUDED.author_id,updated_at=now(),sync_state=\'pending\' ',[$id,$e['id'],$num,$uid,json_encode($data)]);query('INSERT INTO audit(id,record_type,record_id,actor_id,prior_data,new_data) VALUES(?,?,?,?,?,?)',[uuid(),'pit',$id,$uid,$old['data']??null,json_encode($data)]);go('team&n='.$num); }
- if(in_array($p,['pick_status','pick_move','pick_order','pick_note'],true)&&$e&&role('admin','mentor','drive')) {
+ if(in_array($p,['pick_status','pick_move','pick_order','pick_note','pick_dnp'],true)&&$e&&role('admin','mentor','drive')) {
   $rows=pickRows($e['id']);$numbers=array_map('intval',array_column($rows,'number'));
   if($p==='pick_order'){
    $order=json_decode((string)($_POST['order']??''),true);
@@ -224,11 +224,12 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
   }
   $num=(int)($_POST['team']??0);$index=array_search($num,$numbers,true);
   if($index===false){http_response_code(400);exit('Choose a team from this event');}
-  if($p==='pick_status'||$p==='pick_note'){
+  if(in_array($p,['pick_status','pick_note','pick_dnp'],true)){
    $note=trim((string)($_POST['note']??''));if($p==='pick_note'&&strlen($note)>1000){http_response_code(400);exit('Note is too long');}
    db()->beginTransaction();try{
     savePickOrder($e['id'],$numbers);$rank=$index+1;
     if($p==='pick_status')query('INSERT INTO picklist(event_id,team_number,rank,picked) VALUES(?,?,?,?) ON CONFLICT(event_id,team_number) DO UPDATE SET picked=EXCLUDED.picked',[$e['id'],$num,$rank,isset($_POST['picked'])?'true':'false']);
+    elseif($p==='pick_dnp')query('INSERT INTO picklist(event_id,team_number,rank,do_not_pick) VALUES(?,?,?,?) ON CONFLICT(event_id,team_number) DO UPDATE SET do_not_pick=EXCLUDED.do_not_pick',[$e['id'],$num,$rank,isset($_POST['dnp'])?'true':'false']);
     else query('INSERT INTO picklist(event_id,team_number,rank,note,do_not_pick) VALUES(?,?,?,?,?) ON CONFLICT(event_id,team_number) DO UPDATE SET note=EXCLUDED.note,do_not_pick=EXCLUDED.do_not_pick',[$e['id'],$num,$rank,$note,isset($_POST['dnp'])?'true':'false']);
     db()->commit();
    }catch(Throwable $ex){db()->rollBack();throw $ex;}
@@ -347,15 +348,13 @@ elseif($p==='picks'){
   $cards=pickRows($e['id']);$editor=role('admin','mentor','drive');
   $reports=query('SELECT s.team_number,sc.data FROM scouting sc JOIN slots s ON s.id=sc.slot_id JOIN matches m ON m.id=s.match_id WHERE m.event_id=? AND sc.status=\'submitted\' ORDER BY sc.updated_at DESC',[$e['id']])->fetchAll(PDO::FETCH_ASSOC);
   $byTeam=[];foreach($reports as $report)$byTeam[$report['team_number']][]=json_decode($report['data'],true)?:[];
-  $pitNotes=[];foreach(query('SELECT team_number,data FROM pit WHERE event_id=?',[$e['id']]) as $pit)$pitNotes[$pit['team_number']]=trim((string)(json_decode($pit['data'],true)['notes']??''));
   $unpicked=count(array_filter($cards,fn($card)=>!picked($card['picked'])));
   echo '<p>'.h($e['name']).' · '.h($unpicked).' available teams · '.h(count($cards)-$unpicked).' picked. '.($editor?'Drag by the three-dot handle on the left. On desktop, you can also drag the card.':'').'</p><div class="pick-cards" id="pickCards">';
   $position=0;
-  foreach($cards as $i=>$card){
+  foreach($cards as $card){
    $num=(int)$card['number'];$isPicked=picked($card['picked']);if(!$isPicked)$position++;
    $entries=$byTeam[$num]??[];$metrics=[];
-   foreach(['match_score'=>'Avg match score','auto_score'=>'Avg autonomous','teleop_score'=>'Avg teleop','defense_rating'=>'Avg defensive ability','defensive_vulnerability'=>'Avg defensive vulnerability'] as $key=>$label)$metrics[$label]=metricAverage($entries,$key,in_array($key,['defense_rating','defensive_vulnerability'],true)?5.0:null);
-   $latest='';foreach($entries as $entry)if(trim((string)($entry['notes']??''))!==''){$latest=trim($entry['notes']);break;}
+   foreach(['match_score'=>'Avg Match Score','auto_score'=>'Avg Autonomous','teleop_score'=>'Avg Teleop','defense_rating'=>'Avg Defensive Ability','defensive_vulnerability'=>'Avg Defensive Vulnerability'] as $key=>$label)$metrics[$label]=metricAverage($entries,$key,in_array($key,['defense_rating','defensive_vulnerability'],true)?5.0:null);
    echo '<article class="pick-card'.($isPicked?' picked':'').'" data-team="'.h($num).'" data-picked="'.($isPicked?'1':'0').'"'.($editor&&!$isPicked?' draggable="true"':'').'><div class="pick-card-check">';
    if($editor)echo '<form method="post" action="/?p=pick_status">'.csrf().'<input type="hidden" name="team" value="'.h($num).'"><label title="Mark team picked"><input type="checkbox" name="picked" value="1" aria-label="Team '.h($num).' picked"'.($isPicked?' checked':'').' onchange="this.form.requestSubmit()"><span>Picked</span></label></form>';
    elseif($isPicked)echo '<span>✓ Picked</span>';
@@ -363,14 +362,12 @@ elseif($p==='picks'){
    echo '</div>';
    if($card['uploaded_at'])echo '<img class="pick-card-photo" src="/?p=robot_photo&n='.h($num).'&v='.rawurlencode($card['uploaded_at']).'" alt="Robot photo for team '.h($num).'" loading="lazy">';
    else echo '<div class="pick-card-photo placeholder">Robot photo</div>';
-   echo '<div class="pick-card-content"><div class="pick-card-title"><h2><a href="/?p=team&n='.h($num).'">'.h($num).' · '.h($card['name']?:'Unnamed team').'</a></h2><span>'.($isPicked?'Picked':'Pick #'.h($position)).'</span>'.(picked($card['do_not_pick'])?'<strong class="dnp">Do not pick</strong>':'').'</div>';
-   echo '<div class="pick-stats">';foreach($metrics as $label=>$value)echo '<div><small>'.h($label).'</small><strong>'.h($value===null?'—':number_format($value,1)).'</strong></div>';echo '<div><small>Match reports</small><strong>'.h(count($entries)).'</strong></div></div>';
-   if(trim((string)($card['note']??''))!=='')echo '<p class="pick-note"><b>Pick note:</b> '.h($card['note']).'</p>';
-   if(($pitNotes[$num]??'')!==''||$latest!==''){echo '<details class="pick-observations"><summary>Scouting notes</summary>';if(($pitNotes[$num]??'')!=='')echo '<p><b>Pit:</b> '.h($pitNotes[$num]).'</p>';if($latest!=='')echo '<p><b>Latest match:</b> '.h($latest).'</p>';echo '</details>';}
-   if($editor){
-    echo '<div class="pick-actions">';
-    echo '<details><summary>Edit pick note</summary><form method="post" action="/?p=pick_note">'.csrf().'<input type="hidden" name="team" value="'.h($num).'"><label>Note<input name="note" maxlength="1000" value="'.h($card['note']??'').'"></label><label><input type="checkbox" name="dnp"'.(picked($card['do_not_pick'])?' checked':'').'> Do not pick</label><button>Save note</button></form></details></div>';
-   }
+   echo '<div class="pick-card-content"><div class="pick-card-title"><h2><a href="/?p=team&n='.h($num).'">'.h($num).' · '.h($card['name']?:'Unnamed team').'</a></h2><span>'.($isPicked?'Picked':'Pick #'.h($position)).'</span></div>';
+   echo '<div class="pick-stats">';
+   foreach($metrics as $label=>$value)echo '<span class="pick-stat"><span>'.h($label).':</span><strong>'.h($value===null?'—':number_format($value,1)).'</strong></span>';
+   echo '<span class="pick-stat"><span>Reports:</span><strong>'.h(count($entries)).'</strong></span></div></div><div class="pick-card-dnp">';
+   if($editor)echo '<form method="post" action="/?p=pick_dnp">'.csrf().'<input type="hidden" name="team" value="'.h($num).'"><label><input type="checkbox" name="dnp" value="1" aria-label="Do Not Pick team '.h($num).'"'.(picked($card['do_not_pick'])?' checked':'').' onchange="this.form.requestSubmit()"><span>Do Not Pick</span></label></form>';
+   elseif(picked($card['do_not_pick']))echo '<span>Do Not Pick</span>';
    echo '</div></article>';
   }
   echo '</div>';
