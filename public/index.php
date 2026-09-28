@@ -90,7 +90,8 @@ function eventType(string $name): string {
 }
 function metricAverage(array $reports,string $key,?float $max=null): ?float { $values=[];foreach($reports as $d){$v=$d[$key]??null;if($v!==null&&$v!==''&&is_numeric($v)&&(float)$v>=0&&($max===null||(float)$v<=$max))$values[]=(float)$v;}return $values?array_sum($values)/count($values):null; }
 function picked($value): bool { return in_array($value,[true,'t','1',1],true); }
-function pickRows(string $eventId): array { return query('SELECT t.number,t.name,ph.uploaded_at,p.rank,p.note,p.do_not_pick,p.picked FROM teams t LEFT JOIN picklist p ON p.event_id=t.event_id AND p.team_number=t.number LEFT JOIN team_photos ph ON ph.event_id=t.event_id AND ph.team_number=t.number WHERE t.event_id=? ORDER BY CASE WHEN p.picked IS TRUE THEN 1 ELSE 0 END,COALESCE(p.rank,1000000+t.number),t.number',[$eventId])->fetchAll(PDO::FETCH_ASSOC); }
+function pickRows(string $eventId): array { return query('SELECT t.number,t.name,ph.uploaded_at,p.rank,p.note,p.do_not_pick,p.picked,pit.data AS pit_data FROM teams t LEFT JOIN picklist p ON p.event_id=t.event_id AND p.team_number=t.number LEFT JOIN pit ON pit.event_id=t.event_id AND pit.team_number=t.number LEFT JOIN team_photos ph ON ph.event_id=t.event_id AND ph.team_number=t.number WHERE t.event_id=? ORDER BY CASE WHEN p.do_not_pick IS TRUE THEN 2 WHEN p.picked IS TRUE THEN 1 ELSE 0 END,COALESCE(p.rank,1000000+t.number),t.number',[$eventId])->fetchAll(PDO::FETCH_ASSOC); }
+function robotMeta(array $data): string { $type=$data['robot_meta']??'';return $type==='Other'?trim((string)($data['robot_meta_other']??'')):$type; }
 function savePickOrder(string $eventId,array $numbers): void { foreach($numbers as $i=>$number)query('INSERT INTO picklist(event_id,team_number,rank) VALUES(?,?,?) ON CONFLICT(event_id,team_number) DO UPDATE SET rank=EXCLUDED.rank',[$eventId,$number,$i+1]); }
 function heatColor(?float $value,?float $min,?float $max): string {
  if($value===null||$min===null||$max===null||$min===$max)return '';
@@ -153,11 +154,24 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
     query('UPDATE slots SET status=\'submitted\' WHERE id=?',[$slot['id']]);
     if($slot['record_id'])$replaced++;else $new++;
    }
+   $metaOptions=[['Big Dumper',''],['Turret',''],['Other','Dual intake'],['Other','Articulating hood']];
+   $pitAdded=0;$pitReplaced=0;$pitKept=0;
+   foreach(array_keys($teams) as $teamNumber) {
+    $existing=query('SELECT id,data FROM pit WHERE event_id=? AND team_number=?',[$e['id'],(int)$teamNumber])->fetch(PDO::FETCH_ASSOC);
+    $prior=$existing['data']??null;
+    if($existing&&!((json_decode($prior,true)?:[])['demo']??false)){$pitKept++;continue;}
+    [$type,$custom]=$metaOptions[random_int(0,count($metaOptions)-1)];
+    $data=['demo'=>true,'robot_meta'=>$type,'robot_meta_other'=>$custom];
+    $encoded=json_encode($data,JSON_THROW_ON_ERROR);$recordId=$existing['id']??uuid();
+    query('INSERT INTO pit(id,event_id,team_number,author_id,data) VALUES(?,?,?,?,?) ON CONFLICT(event_id,team_number) DO UPDATE SET data=EXCLUDED.data,author_id=EXCLUDED.author_id,updated_at=now(),sync_state=\'pending\' ',[$recordId,$e['id'],(int)$teamNumber,$uid,$encoded]);
+    query('INSERT INTO audit(id,record_type,record_id,actor_id,prior_data,new_data) VALUES(?,?,?,?,?,?)',[uuid(),'pit',$recordId,$uid,$prior,$encoded]);
+    if($existing)$pitReplaced++;else $pitAdded++;
+   }
    db()->commit();
   } catch(Throwable $ex) {db()->rollBack();throw $ex;}
   $covered=query('SELECT count(DISTINCT s.team_number) FROM scouting sc JOIN slots s ON s.id=sc.slot_id JOIN matches m ON m.id=s.match_id WHERE m.event_id=? AND sc.status=\'submitted\' ',[$e['id']])->fetchColumn();
   $_SESSION['flash_type']='success';
-  $_SESSION['flash']="WPI demo data ready: $covered of ".count($teams)." teams have reports; $new new reports, $replaced regenerated demo reports, $kept existing reports preserved. Open Dashboard to explore the scores.";
+  $_SESSION['flash']="WPI demo data ready: $covered of ".count($teams)." teams have reports; $new new reports, $replaced regenerated demo reports, $kept existing reports preserved. Robot Meta: $pitAdded added, $pitReplaced regenerated, $pitKept manual pit records preserved. Open Dashboard or Pick list to explore.";
   go('admin');
  }
  if($p==='user'&&role('admin')) {if(strlen($_POST['password']??'')<10) {$_SESSION['flash']='Password must be at least 10 characters';go('admin');}query('INSERT INTO users(id,name,password_hash,role,position) VALUES(?,?,?,?,?)',[uuid(),trim($_POST['name']),password_hash($_POST['password'],PASSWORD_DEFAULT),$_POST['role'],$_POST['position']?:null]);go('admin');}
@@ -213,7 +227,7 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
   query('UPDATE slots SET status=? WHERE id=?',[$status,$slot['id']]);go('matches');
  }
  if($p==='upload_photo'&&$e) { $num=(int)($_POST['team']??0);$team=query('SELECT number FROM teams WHERE event_id=? AND number=?',[$e['id'],$num])->fetch(PDO::FETCH_ASSOC);if(!$team){http_response_code(404);exit('Team not found');}$upload=$_FILES['photo']??null;if(!$upload||$upload['error']!==UPLOAD_ERR_OK||$upload['size']>4*1024*1024||$upload['size']<1||!is_uploaded_file($upload['tmp_name'])){$_SESSION['flash']='Choose a JPEG, PNG, or WebP photo under 4 MB.';go('pit&n='.$num);} $details=@getimagesize($upload['tmp_name']);$mime=$details['mime']??'';if(!in_array($mime,['image/jpeg','image/png','image/webp'],true)){$_SESSION['flash']='This image format is not supported. Choose JPEG, PNG, or WebP.';go('pit&n='.$num);} $data=base64_encode(file_get_contents($upload['tmp_name']));query('INSERT INTO team_photos(event_id,team_number,mime,photo_base64) VALUES(?,?,?,?) ON CONFLICT(event_id,team_number) DO UPDATE SET mime=EXCLUDED.mime,photo_base64=EXCLUDED.photo_base64,uploaded_at=now()',[$e['id'],$num,$mime,$data]);$_SESSION['flash']='Robot photo saved.';go('pit&n='.$num);}
- if($p==='pit'&&$e) { $num=(int)($_POST['team']??0);if($num<1)exit('Invalid team');$data=[];foreach(['robot','drivetrain','dimensions','weight','mechanisms','scoring','autonomous','endgame','strategy','reliability','requirements','notes'] as $k)$data[$k]=trim((string)($_POST[$k]??''));query('INSERT INTO teams(event_id,number) VALUES(?,?) ON CONFLICT DO NOTHING',[$e['id'],$num]);$old=query('SELECT * FROM pit WHERE event_id=? AND team_number=?',[$e['id'],$num])->fetch(PDO::FETCH_ASSOC);$id=$old['id']??uuid();query('INSERT INTO pit(id,event_id,team_number,author_id,data) VALUES(?,?,?,?,?) ON CONFLICT(event_id,team_number) DO UPDATE SET data=EXCLUDED.data,author_id=EXCLUDED.author_id,updated_at=now(),sync_state=\'pending\' ',[$id,$e['id'],$num,$uid,json_encode($data)]);query('INSERT INTO audit(id,record_type,record_id,actor_id,prior_data,new_data) VALUES(?,?,?,?,?,?)',[uuid(),'pit',$id,$uid,$old['data']??null,json_encode($data)]);go('team&n='.$num); }
+ if($p==='pit'&&$e) { $num=(int)($_POST['team']??0);if($num<1)exit('Invalid team');$meta=(string)($_POST['robot_meta']??'');$custom=trim((string)($_POST['robot_meta_other']??''));if(!in_array($meta,['','Big Dumper','Turret','Other'],true)||($meta==='Other'&&($custom===''||strlen($custom)>80))){http_response_code(400);exit('Choose Robot Meta or enter custom text under 80 characters');}$data=['robot_meta'=>$meta,'robot_meta_other'=>$meta==='Other'?$custom:''];foreach(['robot','drivetrain','dimensions','weight','mechanisms','scoring','autonomous','endgame','strategy','reliability','requirements','notes'] as $k)$data[$k]=trim((string)($_POST[$k]??''));query('INSERT INTO teams(event_id,number) VALUES(?,?) ON CONFLICT DO NOTHING',[$e['id'],$num]);$old=query('SELECT * FROM pit WHERE event_id=? AND team_number=?',[$e['id'],$num])->fetch(PDO::FETCH_ASSOC);$id=$old['id']??uuid();query('INSERT INTO pit(id,event_id,team_number,author_id,data) VALUES(?,?,?,?,?) ON CONFLICT(event_id,team_number) DO UPDATE SET data=EXCLUDED.data,author_id=EXCLUDED.author_id,updated_at=now(),sync_state=\'pending\' ',[$id,$e['id'],$num,$uid,json_encode($data)]);query('INSERT INTO audit(id,record_type,record_id,actor_id,prior_data,new_data) VALUES(?,?,?,?,?,?)',[uuid(),'pit',$id,$uid,$old['data']??null,json_encode($data)]);go('team&n='.$num); }
  if(in_array($p,['pick_status','pick_move','pick_order','pick_note','pick_dnp'],true)&&$e&&role('admin','mentor','drive')) {
   $rows=pickRows($e['id']);$numbers=array_map('intval',array_column($rows,'number'));
   if($p==='pick_order'){
@@ -227,7 +241,7 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
   if(in_array($p,['pick_status','pick_note','pick_dnp'],true)){
    $note=trim((string)($_POST['note']??''));if($p==='pick_note'&&strlen($note)>1000){http_response_code(400);exit('Note is too long');}
    db()->beginTransaction();try{
-    savePickOrder($e['id'],$numbers);$rank=$index+1;
+    savePickOrder($e['id'],$numbers);$rank=$p==='pick_dnp'&&isset($_POST['dnp'])?count($numbers)+1:$index+1;
     if($p==='pick_status')query('INSERT INTO picklist(event_id,team_number,rank,picked) VALUES(?,?,?,?) ON CONFLICT(event_id,team_number) DO UPDATE SET picked=EXCLUDED.picked',[$e['id'],$num,$rank,isset($_POST['picked'])?'true':'false']);
     elseif($p==='pick_dnp')query('INSERT INTO picklist(event_id,team_number,rank,do_not_pick) VALUES(?,?,?,?) ON CONFLICT(event_id,team_number) DO UPDATE SET do_not_pick=EXCLUDED.do_not_pick',[$e['id'],$num,$rank,isset($_POST['dnp'])?'true':'false']);
     else query('INSERT INTO picklist(event_id,team_number,rank,note,do_not_pick) VALUES(?,?,?,?,?) ON CONFLICT(event_id,team_number) DO UPDATE SET note=EXCLUDED.note,do_not_pick=EXCLUDED.do_not_pick',[$e['id'],$num,$rank,$note,isset($_POST['dnp'])?'true':'false']);
@@ -289,6 +303,10 @@ elseif($p==='team'||$p==='pit'){
   if($photo)echo '<img class="pit-photo" src="/?p=robot_photo&n='.h($n).'&v='.rawurlencode($photo['uploaded_at']).'" alt="Robot photo for team '.h($n).'">';
   else echo '<div class="pit-photo placeholder">Add a robot photo</div>';
   echo '<form method="post" action="/?p=upload_photo" enctype="multipart/form-data">'.csrf().'<input type="hidden" name="team" value="'.h($n).'"><label>Choose robot photo<input type="file" name="photo" accept="image/jpeg,image/png,image/webp" required></label><button>Upload photo</button><small>JPEG, PNG, or WebP · up to 4 MB</small></form></section><h2>Pit scouting</h2><form method="post" action="/?p=pit">'.csrf().'<input type="hidden" name="team" value="'.h($n).'">';
+  $meta=$d['robot_meta']??'';
+  echo '<label>Robot Meta<select name="robot_meta" onchange="const custom=this.form.elements.robot_meta_other;custom.parentElement.hidden=this.value!==\'Other\';custom.required=this.value===\'Other\'"><option value="">Choose Robot Meta</option>';
+  foreach(['Big Dumper','Turret','Other'] as $option)echo '<option value="'.h($option).'"'.($meta===$option?' selected':'').'>'.h($option).'</option>';
+  echo '</select></label><label'.($meta==='Other'?'':' hidden').'>Custom Robot Meta<input name="robot_meta_other" type="text" maxlength="80" value="'.h($d['robot_meta_other']??'').'"'.($meta==='Other'?' required':'').'></label>';
   foreach(['robot'=>'Robot identity','drivetrain'=>'Drivetrain','dimensions'=>'Dimensions','weight'=>'Weight','mechanisms'=>'Mechanisms','scoring'=>'Scoring capabilities','autonomous'=>'Autonomous','endgame'=>'Endgame','strategy'=>'Preferred strategy','reliability'=>'Reliability','requirements'=>'Special requirements','notes'=>'Notes'] as $k=>$label)echo '<label>'.h($label).'<textarea name="'.h($k).'">'.field($d,$k).'</textarea></label>';
   echo '<button>Save pit record</button></form><p><a href="/?p=team&n='.h($n).'">View team profile</a></p>';
  }else{
@@ -300,7 +318,8 @@ elseif($p==='team'||$p==='pit'){
   if($paths)echo '<p>Each match has its own color. Paths are drawn over the same field image.</p><canvas id="teamPathsCanvas" width="800" height="480" data-paths="'.h(json_encode($paths)).'" aria-label="Combined autonomous paths for team '.h($n).'"></canvas><div id="pathLegend" class="path-legend"></div>';
   else echo '<p>No autonomous paths have been saved for this team yet.</p>';
   echo '</section><h2>Pit notes</h2><section>';
-  foreach($d as $key=>$value)if($value!=='')echo '<p><b>'.h(ucfirst($key)).':</b> '.h($value).'</p>';
+  if(robotMeta($d)!=='')echo '<p><b>Robot Meta:</b> '.h(robotMeta($d)).'</p>';
+  foreach($d as $key=>$value)if(!in_array($key,['demo','robot_meta','robot_meta_other'],true)&&$value!=='')echo '<p><b>'.h(ucfirst($key)).':</b> '.h($value).'</p>';
   if(!$d)echo '<p>No pit record yet.</p>';echo '</section><h2>Match reports</h2>';
   foreach($reports as $r){$v=json_decode($r['data'],true)?:[];echo '<section><b>Q'.h($r['match_number']).' '.h($r['position']).'</b><p>'.h($v['notes']??'').'</p></section>';}
   echo '<script src="'.h(asset('auto-path.js')).'" defer></script>';
@@ -348,20 +367,24 @@ elseif($p==='picks'){
   $cards=pickRows($e['id']);$editor=role('admin','mentor','drive');
   $reports=query('SELECT s.team_number,sc.data FROM scouting sc JOIN slots s ON s.id=sc.slot_id JOIN matches m ON m.id=s.match_id WHERE m.event_id=? AND sc.status=\'submitted\' ORDER BY sc.updated_at DESC',[$e['id']])->fetchAll(PDO::FETCH_ASSOC);
   $byTeam=[];foreach($reports as $report)$byTeam[$report['team_number']][]=json_decode($report['data'],true)?:[];
-  $unpicked=count(array_filter($cards,fn($card)=>!picked($card['picked'])));
-  echo '<p>'.h($e['name']).' · '.h($unpicked).' available teams · '.h(count($cards)-$unpicked).' picked. '.($editor?'Drag by the three-dot handle on the left. On desktop, you can also drag the card.':'').'</p><div class="pick-cards" id="pickCards">';
+  $unpicked=count(array_filter($cards,fn($card)=>!picked($card['picked'])&&!picked($card['do_not_pick'])));
+  $dnpCount=count(array_filter($cards,fn($card)=>picked($card['do_not_pick'])));
+  $pickedCount=count($cards)-$unpicked-$dnpCount;
+  echo '<p>'.h($e['name']).' · '.h($unpicked).' available teams · '.h($pickedCount).' picked · '.h($dnpCount).' Do Not Pick. '.($editor?'Drag by the three-dot handle on the left. On desktop, you can also drag the card.':'').'</p><div class="pick-cards" id="pickCards">';
   $position=0;
   foreach($cards as $card){
-   $num=(int)$card['number'];$isPicked=picked($card['picked']);if(!$isPicked)$position++;
+   $num=(int)$card['number'];$isPicked=picked($card['picked']);$isDnp=picked($card['do_not_pick']);if(!$isPicked&&!$isDnp)$position++;
    $entries=$byTeam[$num]??[];$metrics=[];
    foreach(['match_score'=>'Avg Match Score','auto_score'=>'Avg Autonomous','teleop_score'=>'Avg Teleop','defense_rating'=>'Avg Defensive Ability','defensive_vulnerability'=>'Avg Defensive Vulnerability'] as $key=>$label)$metrics[$label]=metricAverage($entries,$key,in_array($key,['defense_rating','defensive_vulnerability'],true)?5.0:null);
-   echo '<article class="pick-card'.($isPicked?' picked':'').'" data-team="'.h($num).'" data-picked="'.($isPicked?'1':'0').'"'.($editor&&!$isPicked?' draggable="true"':'').'><div class="pick-card-check">';
-   if($editor&&!$isPicked)echo '<button type="button" class="pick-drag" aria-label="Drag team '.h($num).' to reorder" title="Drag to reorder; arrow keys also work"><span aria-hidden="true">⋮</span></button>';
+   echo '<article class="pick-card'.($isPicked?' picked':'').($isDnp?' do-not-pick':'').'" data-team="'.h($num).'" data-picked="'.($isPicked?'1':'0').'" data-dnp="'.($isDnp?'1':'0').'"'.($editor&&!$isPicked&&!$isDnp?' draggable="true"':'').'><div class="pick-card-check">';
+   if($editor&&!$isPicked&&!$isDnp)echo '<button type="button" class="pick-drag" aria-label="Drag team '.h($num).' to reorder" title="Drag to reorder; arrow keys also work"><span aria-hidden="true">⋮</span></button>';
    echo '</div>';
    if($card['uploaded_at'])echo '<img class="pick-card-photo" src="/?p=robot_photo&n='.h($num).'&v='.rawurlencode($card['uploaded_at']).'" alt="Robot photo for team '.h($num).'" loading="lazy">';
-   else echo '<div class="pick-card-photo placeholder">Robot photo</div>';
-   echo '<div class="pick-card-content"><div class="pick-card-title"><h2><a href="/?p=team&n='.h($num).'">'.h($num).' · '.h($card['name']?:'Unnamed team').'</a></h2><span>'.($isPicked?'Picked':'Pick #'.h($position)).'</span></div>';
+   else echo '<div class="pick-card-photo placeholder pick-photo-empty" role="img" aria-label="No robot photo for team '.h($num).'"><svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path d="M24 5v6m-4-6h8M10 18h28v23H10zM6 24h4m28 0h4" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="27" r="2" fill="currentColor"/><circle cx="30" cy="27" r="2" fill="currentColor"/><path d="M18 35h12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg><span>No photo</span></div>';
+   echo '<div class="pick-card-content"><div class="pick-card-title"><h2><a href="/?p=team&n='.h($num).'">'.h($num).' · '.h($card['name']?:'Unnamed team').'</a></h2><span'.(!$isPicked&&!$isDnp?' class="pick-rank"':'').'>'.($isDnp?'Do Not Pick':($isPicked?'Picked':'Pick #'.h($position))).'</span></div>';
    echo '<div class="pick-stats">';
+   $meta=robotMeta(json_decode($card['pit_data']??'{}',true)?:[]);
+   echo '<span class="pick-stat"><span>Robot Meta:</span><strong>'.h($meta?:'—').'</strong></span>';
    foreach($metrics as $label=>$value)echo '<span class="pick-stat"><span>'.h($label).':</span><strong>'.h($value===null?'—':number_format($value,1)).'</strong></span>';
    echo '<span class="pick-stat"><span>Reports:</span><strong>'.h(count($entries)).'</strong></span></div></div><div class="pick-card-flags">';
    if($editor)echo '<form method="post" action="/?p=pick_status">'.csrf().'<input type="hidden" name="team" value="'.h($num).'"><label title="Mark team picked"><input type="checkbox" name="picked" value="1" aria-label="Team '.h($num).' picked"'.($isPicked?' checked':'').' onchange="this.form.requestSubmit()"><span>Picked</span></label></form>';
