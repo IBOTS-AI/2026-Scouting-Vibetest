@@ -22,3 +22,9 @@ Robot photos (JPEG, PNG, WebP up to 4 MB) are saved in the local PostgreSQL data
 The Admin page confirms the selected event and loaded record counts. The Matches table uses full page width, red and blue alliance columns, and a Scout button in each populated position.
 
 The full-width dashboard summarizes per-team averages from submitted match scouting entries. Scouts enter estimated team match, autonomous, and teleop points, plus defense and defensive vulnerability ratings (0–5). Each dashboard column can be sorted and filtered; numeric filters support comparisons and ranges. Red indicates the lower value observed at the event and blue the higher value; blank metrics have no submitted numeric observation.
+
+## Try the 2026 WPI demo data
+
+Select **2026 → Districts → New England → NE District WPI Event** in Admin, then click **Select event**. In the Active event section, click **Load WPI demo data**. The app imports the available official team list and qualification schedule, then fills each match position with synthetic scouting reports. Autonomous points are randomized from 10–100, teleop from 20–400, the match score is their sum, and both defense ratings are 0–5. All scheduled teams appear in the Dashboard and Teams pages with populated match reports. These numbers are invented for display testing, not actual match results.
+
+Existing manually entered records are left alone. Clicking the button again regenerates only the records marked as demo data. If the server cannot reach FIRST and no WPI schedule is cached, use **Refresh official data** once connectivity returns, then retry.
