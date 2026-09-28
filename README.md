@@ -21,12 +21,12 @@ Robot photos (JPEG, PNG, WebP up to 4 MB) are saved in the local PostgreSQL data
 
 The Admin page confirms the selected event and loaded record counts. The Matches table uses full page width, red and blue alliance columns, and a Scout button in each populated position.
 
-The full-width dashboard summarizes per-team averages from submitted match scouting entries. Scouts enter estimated team match, autonomous, and teleop points, plus defense and defensive vulnerability ratings (0–5). Each dashboard column can be sorted and filtered; numeric filters support comparisons and ranges. Red indicates the lower value observed at the event and blue the higher value; blank metrics have no submitted numeric observation.
+The full-width Pit Scouting Dashboard summarizes per-team averages from submitted match scouting entries. Scouts enter estimated team match, autonomous, and teleop points, plus defense and defensive vulnerability ratings (0–5). Click any column heading to sort. Metric cells transition from red for the lowest observed team average through orange, yellow, and green to blue for the highest; blank metrics have no submitted numeric observation.
 
 ## Try the 2026 WPI demo data
 
 Select **2026 → Districts → New England → NE District WPI Event** in Admin, then click **Select event**. In the Active event section, click **Load WPI demo data**. The app loads the bundled official WPI team list and 78 qualification matches (39 teams), then fills each match position with synthetic scouting reports. Autonomous points are randomized from 10–100, teleop from 20–400, the match score is their sum, and both defense ratings are 0–5. All scheduled teams appear in the Dashboard and Teams pages with populated match reports. These numbers are invented for display testing, not actual match results.
 
-Existing manually entered records are left alone. Clicking the button again regenerates only the records marked as demo data. The bundled WPI schedule means this demo action works even when FIRST is temporarily unreachable. The Dashboard displays its submitted report count and a table-controls status so you can tell whether the data and sorting script loaded.
+Existing manually entered records are left alone. Clicking the button again regenerates only the records marked as demo data. The bundled WPI schedule means this demo action works even when FIRST is temporarily unreachable. The Dashboard displays its submitted report count and a sorting status so you can tell whether the data and sorting script loaded.
 
 After updating an existing ZIP installation, rebuild the Docker image with `docker compose up --build -d`. Copy the complete updated project, including `public/dashboard.js`, `fixtures/wpi-2026.json`, and `Dockerfile`; replacing only `public/index.php` will leave the table controls or bundled schedule out of date. The PostgreSQL Docker volume persists across an image rebuild.
