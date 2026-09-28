@@ -10,3 +10,4 @@ CREATE TABLE IF NOT EXISTS picklist (event_id uuid REFERENCES events(id), team_n
 CREATE TABLE IF NOT EXISTS event_catalog (year integer NOT NULL, code text NOT NULL, name text NOT NULL, location text NOT NULL, state_code text NOT NULL DEFAULT '', fetched_at timestamptz DEFAULT now(), PRIMARY KEY(year,code));
 CREATE TABLE IF NOT EXISTS districts (year integer NOT NULL, code text NOT NULL, name text NOT NULL, fetched_at timestamptz DEFAULT now(), PRIMARY KEY(year,code));
 CREATE TABLE IF NOT EXISTS district_events (year integer NOT NULL, district_code text NOT NULL, event_code text NOT NULL, PRIMARY KEY(year,district_code,event_code));
+CREATE TABLE IF NOT EXISTS team_photos (event_id uuid NOT NULL, team_number integer NOT NULL, mime text NOT NULL, photo_base64 text NOT NULL, uploaded_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(event_id,team_number), FOREIGN KEY(event_id,team_number) REFERENCES teams(event_id,number));
