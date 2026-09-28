@@ -46,6 +46,19 @@
   // Pointer events on the handle also support touch and stylus without blocking page scroll.
   for (const handle of list.querySelectorAll('.pick-drag')) {
     let touchCard = null, touchOrder = '';
+    handle.addEventListener('keydown', event => {
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+      event.preventDefault();
+      const card = handle.closest('.pick-card');
+      const available = cards().filter(unpicked);
+      const index = available.indexOf(card);
+      const target = available[index + (event.key === 'ArrowUp' ? -1 : 1)];
+      if (!target) return;
+      const before = JSON.stringify(order());
+      const rect = target.getBoundingClientRect();
+      move(card, target, event.key === 'ArrowUp' ? rect.top : rect.bottom);
+      if (JSON.stringify(order()) !== before) save();
+    });
     handle.addEventListener('pointerdown', event => {
       if (event.pointerType === 'mouse') return;
       event.preventDefault();touchCard = handle.closest('.pick-card');touchOrder = JSON.stringify(order());
