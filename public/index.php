@@ -371,8 +371,9 @@ elseif($p==='strategy'){
    foreach($partners as $partner)if($partner['number'])echo '<span><i style="background:'.h($partner['color']).'"></i>Team '.h($partner['number']).'</span>';
    echo '</div><p>'.nl2br(h($plan['notes'])).'</p>';
   }else echo '<p>Choose a saved plan to view it.</p>';
-  echo '</div><aside class="strategy-list"><h2>Saved plans</h2>';
-  if($editor)echo '<p><a class="button" href="/?p=strategy">New plan</a></p>';
+  echo '</div><aside class="strategy-list"><div class="strategy-list-header"><h2>Saved plans</h2>';
+  if($editor)echo '<a class="button strategy-new" href="/?p=strategy">New plan</a>';
+  echo '</div>';
   foreach($plans as $item){
    echo '<div class="strategy-plan-row'.($plan&&$plan['id']===$item['id']?' current':'').'"><div class="strategy-plan-name"><strong>'.h($item['title']).'</strong><small>'.h($item['updated_at']).'</small></div><a class="button strategy-load" href="/?p=strategy&id='.h($item['id']).'" aria-label="Load plan '.h($item['title']).'">Load</a>';
    if($editor)echo '<form class="strategy-delete-form" method="post" action="/?p=strategy_delete" onsubmit="return confirm(&quot;Delete this strategy plan?&quot;)">'.csrf().'<input type="hidden" name="id" value="'.h($item['id']).'"><button type="submit" class="strategy-delete" aria-label="Delete plan '.h($item['title']).'" title="Delete plan '.h($item['title']).'"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6m4-6v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button></form>';
