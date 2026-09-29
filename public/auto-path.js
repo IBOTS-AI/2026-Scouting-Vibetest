@@ -92,9 +92,18 @@
       document.getElementById('pathClear')?.addEventListener('click', () => { strokes.length = 0; save(); });
     }
   }
-  for (const slider of document.querySelectorAll('.rating-label input[type="range"]')) {
+  for (const slider of document.querySelectorAll('.rating-field input[type="range"]')) {
     const output = document.getElementById(slider.id + 'Value');
-    slider.addEventListener('input', () => { if (output) output.value = Number(slider.value).toFixed(1); });
+    const update = () => {
+      const label = Number(slider.value) < 0 ? 'N/A' : Number(slider.value).toFixed(1);
+      if (output) output.value = label;
+      slider.setAttribute('aria-valuetext', label);
+    };
+    slider.addEventListener('input', update);
+    slider.closest('.rating-field').querySelector('.rating-na').addEventListener('click', () => {
+      slider.value = slider.min; update();
+    });
+    update();
   }
   const combined = document.getElementById('teamPathsCanvas');
   if (combined) {
