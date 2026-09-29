@@ -123,7 +123,7 @@ function pathWidget(array $strokes,bool $editable): void {
  if($editable)echo '<input type="hidden" name="auto_path" id="autoPathInput" value="'.h(json_encode($strokes)).'"><div class="path-actions"><button type="button" id="pathUndo">Undo last stroke</button><button type="button" id="pathClear">Clear path</button></div>';
  echo '</section>';
 }
-function page(string $title,bool $wide=false): void { echo '<!doctype html><html lang="en"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h($title).' · Scouting</title><link rel="stylesheet" href="'.h(asset('style.css')).'"><header><strong>2370 · Scouting</strong><nav><a href="/?p=home">Dashboard</a><a href="/?p=matches">Matches</a><a href="/?p=teams">Teams</a><a href="/?p=strategy">Strategy</a><a href="/?p=picks">Pick list</a><a href="/?p=admin">Admin</a><a href="/?p=logout">Log out</a></nav></header><main'.($wide?' class="wide"':'').'><h1>'.h($title).'</h1>'; if(isset($_SESSION['flash'])) {echo '<aside class="'.h($_SESSION['flash_type']??'notice').'">'.h($_SESSION['flash']).'</aside>';unset($_SESSION['flash'],$_SESSION['flash_type']);} }
+function page(string $title,bool $wide=false): void { $active=$GLOBALS['e']??null;$year='';if($active&&preg_match('/^(\d{4})/',(string)($active['event_key']??''),$match))$year=$match[1];echo '<!doctype html><html lang="en"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h($title).' · Scouting</title><link rel="stylesheet" href="'.h(asset('style.css')).'"><header><div class="header-identity"><strong>2370 · Scouting</strong>'.($active?'<span class="selected-event">Selected Event: '.h(trim($year.' '.$active['name'])).'</span>':'').'</div><nav><a href="/?p=home">Dashboard</a><a href="/?p=matches">Matches</a><a href="/?p=teams">Teams</a><a href="/?p=strategy">Strategy</a><a href="/?p=picks">Pick list</a><a href="/?p=admin">Admin</a><a href="/?p=logout">Log out</a></nav></header><main'.($wide?' class="wide"':'').'><h1>'.h($title).'</h1>'; if(isset($_SESSION['flash'])) {echo '<aside class="'.h($_SESSION['flash_type']??'notice').'">'.h($_SESSION['flash']).'</aside>';unset($_SESSION['flash'],$_SESSION['flash_type']);} }
 function endpage(): void {echo '</main></html>';}
 try { db(); } catch(Throwable $e) { http_response_code(503);exit('Database unavailable. Start Docker Compose and try again.'); }
 $p=$_GET['p']??'home';
@@ -365,7 +365,7 @@ elseif($p==='picks'){
   $byTeam=[];foreach($reports as $report)$byTeam[$report['team_number']][]=json_decode($report['data'],true)?:[];
   $groups=array_fill_keys(pickBuckets(),[]);
   foreach($cards as $card){$bucket=in_array($card['bucket']??'B',pickBuckets(),true)?($card['bucket']??'B'):'B';$groups[$bucket][]=$card;}
-  echo '<p>'.h($e['name']).' · '.h(count($cards)).' teams across five pick buckets. '.($editor?'Drag the three-dot handle to reorder or move teams between buckets. Use arrow keys on the handle for keyboard movement.':'').'</p><div class="pick-board-scroll"><div class="pick-board" id="pickBoard">';
+  echo '<div class="pick-board-scroll"><div class="pick-board" id="pickBoard">';
   foreach($groups as $bucket=>$bucketCards){
    echo '<section class="pick-bucket" data-bucket="'.h($bucket).'"><div class="pick-bucket-head"><h2>'.h($bucket).'</h2><span>'.h(count($bucketCards)).' teams</span></div><div class="pick-cards" data-bucket="'.h($bucket).'">';
    foreach($bucketCards as $card){
