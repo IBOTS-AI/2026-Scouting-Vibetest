@@ -33,6 +33,33 @@
   }
   const canvas = document.getElementById('autoPathCanvas');
   if (canvas) {
+    const stage = canvas.closest('.drawing-stage');
+    const fullScreenButton = stage?.querySelector('.canvas-fullscreen');
+    if (fullScreenButton) {
+      const expanded = () => document.fullscreenElement === stage || stage.classList.contains('canvas-expanded');
+      const sync = () => {
+        fullScreenButton.textContent = expanded() ? 'Exit full screen' : 'Full screen';
+        fullScreenButton.setAttribute('aria-pressed', String(expanded()));
+      };
+      fullScreenButton.addEventListener('click', async () => {
+        if (document.fullscreenElement === stage) await document.exitFullscreen();
+        else if (stage.classList.contains('canvas-expanded')) stage.classList.remove('canvas-expanded');
+        else {
+          try {
+            if (!stage.requestFullscreen) throw new Error('Fullscreen unavailable');
+            await stage.requestFullscreen();
+          } catch { stage.classList.add('canvas-expanded'); }
+        }
+        sync();
+      });
+      document.addEventListener('fullscreenchange', sync);
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && stage.classList.contains('canvas-expanded')) {
+          stage.classList.remove('canvas-expanded');
+          sync();
+        }
+      });
+    }
     const input = document.getElementById('autoPathInput');
     const strokes = parse(canvas.dataset.strokes);
     const redraw = () => draw(canvas, [{ strokes, color: '#182d4e' }]);
