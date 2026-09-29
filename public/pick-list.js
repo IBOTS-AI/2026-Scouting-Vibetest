@@ -2,7 +2,7 @@
   const board = document.getElementById('pickBoard');
   const form = document.getElementById('pickOrderForm');
   if (!board) return;
-  board.addEventListener('click', event => {
+  document.addEventListener('click', event => {
     const button = event.target.closest('.pick-expand');
     if (!button) return;
     const panel = document.getElementById(button.getAttribute('aria-controls'));
