@@ -343,7 +343,38 @@ elseif($p==='admin'){if(!role('admin')){http_response_code(403);exit('Admins onl
 if($settings['logo_uploaded_at'])echo '<img class="logo-preview" src="/?p=site_logo&v='.rawurlencode($settings['logo_uploaded_at']).'" alt="Current header logo">';
 echo '<form method="post" action="/?p=upload_logo" enctype="multipart/form-data">'.csrf().'<label>Header logo (JPEG, PNG, or WebP, up to 4 MB)<input type="file" name="logo" accept="image/jpeg,image/png,image/webp" required></label><button>Upload logo</button></form>';
 echo '<form method="post" action="/?p=dark_mode" class="theme-form">'.csrf().'<label class="theme-switch"><input type="checkbox" name="dark_mode" value="1"'.(picked($settings['dark_mode'])?' checked':'').' onchange="this.form.requestSubmit()"><span class="theme-slider" aria-hidden="true"></span><span>Dark Mode</span></label><noscript><button>Save theme</button></noscript></form></section>';echo '<h2>Users</h2>';foreach(query('SELECT name,role,position FROM users ORDER BY name')->fetchAll(PDO::FETCH_ASSOC) as $u)echo '<p>'.h($u['name']).' · '.h($u['role']).' '.h($u['position']).'</p>';endpage();}
-elseif($p==='matches'){page('Match schedule',true);if($e){echo '<p>'.h($e['name']).'</p><div class="scroll"><table class="match-table"><thead><tr><th>Match</th>';foreach(['R1','R2','R3','B1','B2','B3'] as $pos){$alliance=$pos[0]==='R'?'red':'blue';echo '<th class="'.h($alliance).'-head">'.h($pos).'</th>';}echo '</tr></thead><tbody>';foreach(query('SELECT * FROM matches WHERE event_id=? ORDER BY match_number',[$e['id']]) as $m){echo '<tr><th>Q'.h($m['match_number']).'</th>';foreach(['R1','R2','R3','B1','B2','B3'] as $pos){$alliance=$pos[0]==='R'?'red':'blue';$s=query('SELECT * FROM slots WHERE match_id=? AND position=?',[$m['id'],$pos])->fetch(PDO::FETCH_ASSOC);echo '<td class="'.h($alliance).'-cell">';if($s)echo '<div class="slot-line"><strong>'.h($s['team_number']).'</strong><a class="scout-button" href="/?p=scout&id='.h($s['id']).'">Scout</a></div><small>'.h($s['status']).'</small>';else echo '—';echo '</td>';}echo '</tr>';}echo '</tbody></table></div>';}endpage();}
+elseif($p==='matches'){page('Match schedule',true);if($e){echo '<p>'.h($e['name']).'</p><div class="scroll"><table class="match-table"><colgroup><col class="match-number-col"><col span="6"></colgroup><thead><tr><th>Match</th>';foreach(['R1','R2','R3','B1','B2','B3'] as $pos){$alliance=$pos[0]==='R'?'red':'blue';echo '<th class="'.h($alliance).'-head">'.h($pos).'</th>';}echo '</tr></thead><tbody>';foreach(query('SELECT * FROM matches WHERE event_id=? ORDER BY match_number',[$e['id']]) as $m){echo '<tr><th scope="row"><a class="match-number-link" href="/?p=match&n='.h($m['match_number']).'" aria-label="View qualification match '.h($m['match_number']).'">Q'.h($m['match_number']).'</a></th>';foreach(['R1','R2','R3','B1','B2','B3'] as $pos){$alliance=$pos[0]==='R'?'red':'blue';$s=query('SELECT * FROM slots WHERE match_id=? AND position=?',[$m['id'],$pos])->fetch(PDO::FETCH_ASSOC);echo '<td class="'.h($alliance).'-cell">';if($s)echo '<div class="slot-line"><strong>'.h($s['team_number']).'</strong><a class="scout-button" href="/?p=scout&id='.h($s['id']).'">Scout</a></div><small>'.h($s['status']).'</small>';else echo '—';echo '</td>';}echo '</tr>';}echo '</tbody></table></div>';}endpage();}
+elseif($p==='match'){
+ $number=(int)($_GET['n']??0);$match=$e&&$number>0?query('SELECT * FROM matches WHERE event_id=? AND match_number=?',[$e['id'],$number])->fetch(PDO::FETCH_ASSOC):false;
+ if(!$match){http_response_code(404);exit('Match not found');}
+ $slots=query('SELECT s.id,s.position,s.team_number,s.status,t.name,p.data AS pit_data,ph.uploaded_at,sc.data AS report_data,sc.status AS report_status FROM slots s LEFT JOIN teams t ON t.event_id=? AND t.number=s.team_number LEFT JOIN pit p ON p.event_id=? AND p.team_number=s.team_number LEFT JOIN team_photos ph ON ph.event_id=? AND ph.team_number=s.team_number LEFT JOIN scouting sc ON sc.slot_id=s.id WHERE s.match_id=?',[$e['id'],$e['id'],$e['id'],$match['id']])->fetchAll(PDO::FETCH_ASSOC);
+ $byPosition=[];foreach($slots as $slot)$byPosition[$slot['position']]=$slot;
+ $reports=query('SELECT s.team_number,sc.data FROM scouting sc JOIN slots s ON s.id=sc.slot_id JOIN matches m ON m.id=s.match_id WHERE m.event_id=? AND sc.status=\'submitted\' ',[$e['id']])->fetchAll(PDO::FETCH_ASSOC);
+ $byTeam=[];foreach($reports as $report)$byTeam[$report['team_number']][]=json_decode($report['data'],true)?:[];
+ page('Qualification Match Q'.$number,true);
+ echo '<p><a href="/?p=matches">← Match schedule</a> · '.h($e['name']).'</p>';
+ if($match['video_url'])echo '<p><a href="'.h($match['video_url']).'">Watch match video</a></p>';
+ echo '<div class="match-alliances">';
+ foreach(['R'=>'Red','B'=>'Blue'] as $initial=>$name){
+  $alliance=$initial==='R'?'red':'blue';echo '<section class="match-alliance '.h($alliance).'"><h2>'.h($name).' Alliance</h2>';
+  for($i=1;$i<=3;$i++){
+   $position=$initial.$i;$slot=$byPosition[$position]??null;
+   if(!$slot){echo '<div class="match-team empty"><h3>'.h($position).' · Team not assigned</h3></div>';continue;}
+   $teamNumber=(int)$slot['team_number'];$entries=$byTeam[$teamNumber]??[];$pit=json_decode($slot['pit_data']??'{}',true)?:[];
+   echo '<article class="match-team"><div class="match-team-head"><div><small>'.h($position).'</small><h3><a href="/?p=team&n='.h($teamNumber).'">'.h($teamNumber).' · '.h($slot['name']?:'Unnamed team').'</a></h3></div><a class="scout-button" href="/?p=scout&id='.h($slot['id']).'">Scout</a></div>';
+   if($slot['uploaded_at'])echo '<img class="match-team-photo" src="/?p=robot_photo&n='.h($teamNumber).'&v='.rawurlencode($slot['uploaded_at']).'" alt="Robot for team '.h($teamNumber).'" loading="lazy">';
+   if($tags=pitTags($pit)){echo '<div class="team-tags">';foreach($tags as $tag)echo '<span class="team-tag tag-tone-'.h(tagTone($tag)).'">'.h($tag).'</span>';echo '</div>';}
+   echo '<p class="match-report-count">'.h(count($entries)).' submitted match reports</p><div class="match-team-metrics">';
+   foreach(['match_score'=>'Avg match','auto_score'=>'Avg auto','teleop_score'=>'Avg teleop','defense_rating'=>'Defensive ability','defensive_vulnerability'=>'Defensive vulnerability'] as $key=>$label){$value=metricAverage($entries,$key,in_array($key,['defense_rating','defensive_vulnerability'],true)?5.0:null);echo '<div><span>'.h($label).'</span><strong>'.h($value===null?'—':number_format($value,1)).'</strong></div>';}
+   echo '</div>';
+   if($slot['report_status']==='submitted'){$current=json_decode($slot['report_data']??'{}',true)?:[];echo '<p class="match-current"><b>Q'.h($number).' scouted:</b> Auto '.h(is_numeric($current['auto_score']??null)?$current['auto_score']:'—').' · Teleop '.h(is_numeric($current['teleop_score']??null)?$current['teleop_score']:'—').' · Total '.h(is_numeric($current['match_score']??null)?$current['match_score']:'—').'</p>';}
+   else echo '<p class="match-current">Q'.h($number).' report not yet submitted.</p>';
+   echo '</article>';
+  }
+  echo '</section>';
+ }
+ echo '</div>';endpage();
+}
 elseif($p==='scout'){
  $s=query('SELECT s.*,m.match_number,m.event_id,m.video_url,sc.data,sc.version,sc.status AS record_status FROM slots s JOIN matches m ON m.id=s.match_id LEFT JOIN scouting sc ON sc.slot_id=s.id WHERE s.id=?',[$_GET['id']??''])->fetch(PDO::FETCH_ASSOC);
  if(!$s||!$e||$s['event_id']!==$e['id']){http_response_code(404);exit('Slot not found');}
