@@ -12,13 +12,30 @@
     button.setAttribute('aria-label', (panel.hidden ? 'Show' : 'Hide') + ' details for team ' + button.closest('.pick-card').dataset.team);
     button.title = panel.hidden ? 'Show details' : 'Hide details';
   });
+  const filter = document.getElementById('pickTagFilter');
+  const allCards = [...document.querySelectorAll('.pick-bucket .pick-card')];
+  const allBuckets = [...document.querySelectorAll('.pick-bucket')];
+  const updateCounts = () => {
+    for (const bucket of allBuckets) {
+      const count = [...bucket.querySelectorAll('.pick-card')].filter(card => !card.hidden).length;
+      bucket.querySelector('.pick-bucket-head span').textContent = count + ' teams';
+    }
+    const count = allCards.filter(card => !card.hidden).length;
+    document.getElementById('pickTagCount').textContent = count + ' of ' + allCards.length + ' teams shown';
+  };
+  const applyFilter = () => {
+    const chosen = filter.value;
+    for (const card of allCards) card.hidden = !!chosen && !JSON.parse(card.dataset.tags || '[]').includes(chosen);
+    updateCounts();
+  };
+  filter.addEventListener('change', applyFilter);
+  applyFilter();
   if (!form) return;
   const buckets = [...board.querySelectorAll('.pick-bucket')];
   const cardsIn = bucket => [...bucket.querySelectorAll('.pick-card')];
   const layout = () => Object.fromEntries(buckets.map(bucket => [bucket.dataset.bucket, cardsIn(bucket).map(card => Number(card.dataset.team))]));
   const snapshot = () => JSON.stringify(layout());
   const save = () => { document.getElementById('pickOrder').value = snapshot(); form.requestSubmit(); };
-  const updateCounts = () => { for (const bucket of buckets) bucket.querySelector('.pick-bucket-head span').textContent = cardsIn(bucket).length + ' teams'; };
   const restore = saved => {
     const byTeam = new Map([...board.querySelectorAll('.pick-card')].map(card => [Number(card.dataset.team), card]));
     for (const bucket of buckets) for (const team of saved[bucket.dataset.bucket]) bucket.querySelector('.pick-cards').appendChild(byTeam.get(team));
@@ -38,7 +55,7 @@
   };
   const move = (card, list, y) => {
     if (!card || !list) return;
-    const otherCards = [...list.querySelectorAll('.pick-card')].filter(item => item !== card);
+    const otherCards = [...list.querySelectorAll('.pick-card')].filter(item => item !== card && !item.hidden);
     const next = otherCards.find(item => { const rect = item.getBoundingClientRect(); return y < rect.top + rect.height / 2; });
     const reference = next || null;
     if (reference !== card.nextSibling || card.parentElement !== list) list.insertBefore(card, reference);
