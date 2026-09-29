@@ -34,6 +34,8 @@ Before real event use, change the initial admin password (currently done by crea
 
 Robot photos (JPEG, PNG, WebP up to 4 MB) are saved in the local PostgreSQL database and appear on team cards and profiles.
 
+Team performance pages chart submitted scores (match, autonomous, and teleop) and 0–5 defense ratings by match. Chart points and match labels link to match details. Each statistic also has a horizontal range chart from minimum to maximum with an average marker and exact min/average/max values. Missing entries are excluded from ranges and leave gaps in trend lines; recorded zeros count. Qualification matches precede elimination matches. An expandable table provides all chart values, and teams without submitted reports show an empty state.
+
 Admin has a Highlighted Team section at the top, defaulting to 2370. That team's number uses a green badge on Matches, match details, Teams, and Pick List. Team numbers in the match schedule link to their team performance pages; the separate Scout button opens the match scouting form.
 
 Admin → Pit Scouting Config configures dropdown options for Robot Meta, Intake, Shooter Type, tags, Driver Experience Level, and Human Player Experience Level. Add, edit, or remove individual choices. Each tag has editable text and a color picker. Removing or renaming a choice that appears in pit records or match reports warns with record counts and requires confirmation; saved data remains intact, and previously saved values stay available on that team's form. The Pick List hides tags on cards and provides a tag filter above the buckets, including Already Picked.
