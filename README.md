@@ -34,7 +34,7 @@ Before real event use, change the initial admin password (currently done by crea
 
 Robot photos (JPEG, PNG, WebP up to 4 MB) are saved in the local PostgreSQL database and appear on team cards and profiles.
 
-Admin → Pit scouting choices configures the dropdown options for Robot Meta, Intake, Shooter Type, tags, Driver Experience Level, and Human Player Experience Level. Add one option per line and save. Pit scouts select tags from the configured list; tags already saved on a team remain editable if an option is later removed. The Pick List hides tags on cards and provides a tag filter above the buckets, including Already Picked.
+Admin → Pit Scouting Config configures dropdown options for Robot Meta, Intake, Shooter Type, tags, Driver Experience Level, and Human Player Experience Level. Add, edit, or remove individual choices. Each tag has editable text and a color picker. Removing or renaming a choice that appears in pit records or match reports warns with record counts and requires confirmation; saved data remains intact, and previously saved values stay available on that team's form. The Pick List hides tags on cards and provides a tag filter above the buckets, including Already Picked.
 
 The Admin page confirms the selected event and loaded record counts. The Matches table uses full page width, red and blue alliance columns, and a Scout button in each populated position.
 
