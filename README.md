@@ -35,6 +35,8 @@ Robot photos (JPEG, PNG, WebP up to 4 MB) are saved in the local PostgreSQL data
 
 The Admin page confirms the selected event and loaded record counts. The Matches table uses full page width, red and blue alliance columns, and a Scout button in each populated position.
 
+The Match schedule keeps the Q-number column narrow. Click Q1, Q2, and so on to open a match detail page with Red and Blue alliance cards side by side. Each scheduled team shows its name, pit tags, submitted report count, event averages for match, auto, teleop, defense ability, and vulnerability, plus that match's submitted auto/teleop/total values when available. Each team has links to its profile and scouting form. On narrow screens, the alliance cards stack vertically.
+
 Admin → Appearance accepts a JPEG, PNG, or WebP header logo up to 4 MB and has a site-wide Dark Mode switch. Both settings persist in local PostgreSQL; the logo appears beside “2370 · Scouting” on signed-in pages. The Strategy page opens directly with its editor and saved plans, without an introductory paragraph.
 
 The full-width Pit Scouting Dashboard summarizes per-team averages from submitted match scouting entries. Scouts enter autonomous and teleop points; overall match score is calculated as their sum. Defensive Ability and Defensive Vulnerability use sliders from 0 to 5 in 0.1 steps. Click any dashboard column heading to sort. Metric cells transition from red for the lowest observed team average through orange, yellow, and green to blue for the highest; blank metrics have no submitted numeric observation.
