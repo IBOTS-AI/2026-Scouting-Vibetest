@@ -47,6 +47,8 @@ The **Pit scouting** form includes Robot Meta (Big Dumper, Turret, or Other with
 
 Pit scouts can assign team tags using the Defense, Passing, L3 Climber, and Offense checkboxes, plus custom comma-separated tags. Tags appear on the team profile and on each condensed Pick list card. The WPI demo loader assigns sample tags to demo pit records; manually entered pit records remain untouched.
 
+Tag colors are consistent across the pit form, team profile, and Pick list. Drivetrain, Intake, and Shooter type offer suggested values while allowing scouts to type a new value; saved values become suggestions for other teams at the event. The pit form also records width, length, and height in inches; weight in pounds; autonomous notes; and Driver and Human Player experience levels (New, Developing, Experienced, Veteran). The former Robot identity, freeform Dimensions, Mechanisms, and Scoring capabilities fields are hidden; existing values stay in the stored record when the updated form is saved.
+
 ## Try the 2026 WPI demo data
 
 Select **2026 → Districts → New England → NE District WPI Event** in Admin, then click **Select event**. In the Active event section, click **Load WPI demo data**. The app loads the bundled official WPI team list and 78 qualification matches (39 teams), then fills each match position with synthetic scouting reports and gives each team a sample Robot Meta pit entry. Autonomous points are randomized from 10–100, teleop from 20–400, the match score is their sum, and both defense ratings are 0–5. All scheduled teams appear in the Dashboard and Teams pages with populated match reports. These numbers and Robot Meta entries are invented for display testing, not actual scouting results.
