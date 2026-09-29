@@ -214,6 +214,19 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
   query('INSERT INTO audit(id,record_type,record_id,actor_id,prior_data,new_data) VALUES(?,?,?,?,?,?)',[uuid(),'strategy',$id,$uid,$old?json_encode(['title'=>$old['title'],'teams'=>json_decode($old['teams'],true),'paths'=>json_decode($old['paths'],true),'notes'=>$old['notes']]):null,json_encode(['title'=>$title,'teams'=>$teams,'paths'=>$cleanPaths,'notes'=>$notes])]);
   $_SESSION['flash_type']='success';$_SESSION['flash']='Strategy plan saved.';go('strategy&id='.$id);
  }
+ if($p==='strategy_delete'&&$e&&role('admin','mentor','drive')){
+  $id=(string)($_POST['id']??'');
+  if(!preg_match('/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i',$id)){http_response_code(400);exit('Invalid strategy plan');}
+  db()->beginTransaction();
+  try{
+   $old=query('SELECT * FROM strategy_plans WHERE id=? AND event_id=? FOR UPDATE',[$id,$e['id']])->fetch(PDO::FETCH_ASSOC);
+   if(!$old){db()->rollBack();http_response_code(404);exit('Strategy plan not found');}
+   query('DELETE FROM strategy_plans WHERE id=? AND event_id=?',[$id,$e['id']]);
+   query('INSERT INTO audit(id,record_type,record_id,actor_id,prior_data,new_data) VALUES(?,?,?,?,?,?)',[uuid(),'strategy',$id,$uid,json_encode(['title'=>$old['title'],'teams'=>json_decode($old['teams'],true),'paths'=>json_decode($old['paths'],true),'notes'=>$old['notes']]),json_encode(['deleted'=>true])]);
+   db()->commit();
+  }catch(Throwable $ex){if(db()->inTransaction())db()->rollBack();throw $ex;}
+  $_SESSION['flash_type']='success';$_SESSION['flash']='Strategy plan deleted.';go('strategy');
+ }
  if($p==='import'&&role('admin')&&$e) { $f=fopen($_FILES['csv']['tmp_name'],'r');$head=array_map('strtolower',fgetcsv($f));$n=0;while(($row=fgetcsv($f))!==false){$r=array_combine($head,$row);$m=(int)($r['match']??0);if(!$m)continue;$mid=query('INSERT INTO matches(id,event_id,match_number) VALUES(?,?,?) ON CONFLICT(event_id,match_number) DO UPDATE SET match_number=EXCLUDED.match_number RETURNING id',[uuid(),$e['id'],$m])->fetchColumn();foreach(['R1','R2','R3','B1','B2','B3'] as $pos){$num=(int)($r[strtolower($pos)]??0);if(!$num)continue;query('INSERT INTO teams(event_id,number) VALUES(?,?) ON CONFLICT DO NOTHING',[$e['id'],$num]);query('INSERT INTO slots(id,match_id,position,team_number) VALUES(?,?,?,?) ON CONFLICT(match_id,position) DO UPDATE SET team_number=EXCLUDED.team_number WHERE NOT EXISTS(SELECT 1 FROM scouting WHERE slot_id=slots.id AND status=\'submitted\')',[uuid(),$mid,$pos,$num]);}$n++;}fclose($f);$_SESSION['flash']="Imported $n matches";go('matches'); }
  if($p==='scout'&&$e) {
   $slot=query('SELECT s.*,m.event_id FROM slots s JOIN matches m ON m.id=s.match_id WHERE s.id=?',[$_POST['slot']??''])->fetch(PDO::FETCH_ASSOC);
@@ -360,7 +373,11 @@ elseif($p==='strategy'){
   }else echo '<p>Choose a saved plan to view it.</p>';
   echo '</div><aside class="strategy-list"><h2>Saved plans</h2>';
   if($editor)echo '<p><a class="button" href="/?p=strategy">New plan</a></p>';
-  foreach($plans as $item)echo '<p><a href="/?p=strategy&id='.h($item['id']).'">'.h($item['title']).'</a><small>'.h($item['updated_at']).'</small></p>';
+  foreach($plans as $item){
+   echo '<div class="strategy-plan-row'.($plan&&$plan['id']===$item['id']?' current':'').'"><div class="strategy-plan-name"><strong>'.h($item['title']).'</strong><small>'.h($item['updated_at']).'</small></div><a class="button strategy-load" href="/?p=strategy&id='.h($item['id']).'" aria-label="Load plan '.h($item['title']).'">Load</a>';
+   if($editor)echo '<form class="strategy-delete-form" method="post" action="/?p=strategy_delete" onsubmit="return confirm(&quot;Delete this strategy plan?&quot;)">'.csrf().'<input type="hidden" name="id" value="'.h($item['id']).'"><button type="submit" class="strategy-delete" aria-label="Delete plan '.h($item['title']).'" title="Delete plan '.h($item['title']).'"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6m4-6v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button></form>';
+   echo '</div>';
+  }
   if(!$plans)echo '<p>No plans saved yet.</p>';
   echo '</aside></div><script src="'.h(asset('strategy.js')).'" defer></script>';endpage();
  }
