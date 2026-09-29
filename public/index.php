@@ -93,7 +93,15 @@ function picked($value): bool { return in_array($value,[true,'t','1',1],true); }
 function pickBuckets(): array { return ['S+','A','B','C','DNP']; }
 function pickRows(string $eventId): array { return query('SELECT t.number,t.name,ph.uploaded_at,p.rank,p.note,p.do_not_pick,p.picked,p.bucket,pit.data AS pit_data FROM teams t LEFT JOIN picklist p ON p.event_id=t.event_id AND p.team_number=t.number LEFT JOIN pit ON pit.event_id=t.event_id AND pit.team_number=t.number LEFT JOIN team_photos ph ON ph.event_id=t.event_id AND ph.team_number=t.number WHERE t.event_id=? ORDER BY COALESCE(p.rank,1000000+t.number),t.number',[$eventId])->fetchAll(PDO::FETCH_ASSOC); }
 function robotMeta(array $data): string { $type=$data['robot_meta']??'';return $type==='Other'?trim((string)($data['robot_meta_other']??'')):$type; }
-function savePickLayout(string $eventId,array $layout): void { foreach($layout as $bucket=>$numbers)foreach($numbers as $i=>$number)query('INSERT INTO picklist(event_id,team_number,rank,bucket,do_not_pick) VALUES(?,?,?,?,?) ON CONFLICT(event_id,team_number) DO UPDATE SET rank=EXCLUDED.rank,bucket=EXCLUDED.bucket,do_not_pick=EXCLUDED.do_not_pick',[$eventId,$number,$i+1,$bucket,$bucket==='DNP'?'true':'false']); }
+function savePickLayout(string $eventId,array $layout): void {
+ $held=array_fill_keys(pickBuckets(),[]);$positions=array_fill_keys(pickBuckets(),0);
+ foreach(pickRows($eventId) as $row){$bucket=in_array($row['bucket']??'B',pickBuckets(),true)?($row['bucket']??'B'):'B';if(picked($row['picked']))$held[$bucket][]=[$positions[$bucket],(int)$row['number']];$positions[$bucket]++;}
+ foreach($layout as $bucket=>$numbers){
+  $ordered=$numbers;
+  foreach($held[$bucket] as [$position,$number])array_splice($ordered,min($position,count($ordered)),0,[$number]);
+  foreach($ordered as $i=>$number)query('INSERT INTO picklist(event_id,team_number,rank,bucket,do_not_pick) VALUES(?,?,?,?,?) ON CONFLICT(event_id,team_number) DO UPDATE SET rank=EXCLUDED.rank,bucket=EXCLUDED.bucket,do_not_pick=EXCLUDED.do_not_pick',[$eventId,$number,$i+1,$bucket,$bucket==='DNP'?'true':'false']);
+ }
+}
 function heatColor(?float $value,?float $min,?float $max): string {
  if($value===null||$min===null||$max===null||$min===$max)return '';
  $stops=[[244,166,166],[248,194,122],[246,234,146],[167,220,167],[158,200,238]];
@@ -235,7 +243,8 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
    $layout=json_decode((string)($_POST['order']??''),true);$flat=[];
    if(!is_array($layout)||array_keys($layout)!==pickBuckets()){http_response_code(400);exit('Invalid pick buckets');}
    foreach($layout as $bucket=>$teams){if(!is_array($teams)||!array_is_list($teams)){http_response_code(400);exit('Invalid pick bucket');}foreach($teams as $team)$flat[]=$team;}
-   if(count($flat)!==count($numbers)||count(array_filter($flat,'is_int'))!==count($flat)||count(array_unique($flat))!==count($numbers)||array_diff($numbers,$flat)||array_diff($flat,$numbers)){http_response_code(400);exit('Invalid pick order');}
+   $available=array_map('intval',array_column(array_values(array_filter($rows,fn($row)=>!picked($row['picked']))),'number'));
+   if(count($flat)!==count($available)||count(array_filter($flat,'is_int'))!==count($flat)||count(array_unique($flat))!==count($available)||array_diff($available,$flat)||array_diff($flat,$available)){http_response_code(400);exit('Invalid pick order');}
    db()->beginTransaction();try{savePickLayout($e['id'],$layout);db()->commit();}catch(Throwable $ex){db()->rollBack();throw $ex;}
    go('picks');
   }
@@ -363,17 +372,18 @@ elseif($p==='picks'){
   $cards=pickRows($e['id']);$editor=role('admin','mentor','drive');
   $reports=query('SELECT s.team_number,sc.data FROM scouting sc JOIN slots s ON s.id=sc.slot_id JOIN matches m ON m.id=s.match_id WHERE m.event_id=? AND sc.status=\'submitted\' ORDER BY sc.updated_at DESC',[$e['id']])->fetchAll(PDO::FETCH_ASSOC);
   $byTeam=[];foreach($reports as $report)$byTeam[$report['team_number']][]=json_decode($report['data'],true)?:[];
-  $groups=array_fill_keys(pickBuckets(),[]);
-  foreach($cards as $card){$bucket=in_array($card['bucket']??'B',pickBuckets(),true)?($card['bucket']??'B'):'B';$groups[$bucket][]=$card;}
+  $groups=array_fill_keys(pickBuckets(),[]);$already=[];
+  foreach($cards as $card){$bucket=in_array($card['bucket']??'B',pickBuckets(),true)?($card['bucket']??'B'):'B';if(picked($card['picked']))$already[]=$card;else $groups[$bucket][]=$card;}
   echo '<div class="pick-board-scroll"><div class="pick-board" id="pickBoard">';
-  foreach($groups as $bucket=>$bucketCards){
-   echo '<section class="pick-bucket" data-bucket="'.h($bucket).'"><div class="pick-bucket-head"><h2>'.h($bucket).'</h2><span>'.h(count($bucketCards)).' teams</span></div><div class="pick-cards" data-bucket="'.h($bucket).'">';
+  foreach(array_merge($groups,['Already Picked'=>$already]) as $bucket=>$bucketCards){
+   if($bucket==='Already Picked')echo '</div></div>';
+   echo '<section class="pick-bucket'.($bucket==='Already Picked'?' already-picked':'').'" data-bucket="'.h($bucket).'"><div class="pick-bucket-head"><h2>'.h($bucket).'</h2><span>'.h(count($bucketCards)).' teams</span></div><div class="pick-cards" data-bucket="'.h($bucket).'">';
    foreach($bucketCards as $card){
-   $num=(int)$card['number'];$isPicked=picked($card['picked']);$isDnp=$bucket==='DNP';
+   $num=(int)$card['number'];$isPicked=picked($card['picked']);$isDnp=($card['bucket']??'B')==='DNP';
    $entries=$byTeam[$num]??[];$metrics=[];
    foreach(['match_score'=>'Avg Match Score','auto_score'=>'Avg Autonomous','teleop_score'=>'Avg Teleop','defense_rating'=>'Avg Defensive Ability','defensive_vulnerability'=>'Avg Defensive Vulnerability'] as $key=>$label)$metrics[$label]=metricAverage($entries,$key,in_array($key,['defense_rating','defensive_vulnerability'],true)?5.0:null);
-   echo '<article class="pick-card'.($isPicked?' picked':'').($isDnp?' do-not-pick':'').'" data-team="'.h($num).'"'.($editor?' draggable="true"':'').'><div class="pick-card-check">';
-   if($editor)echo '<button type="button" class="pick-drag" aria-label="Drag team '.h($num).' to reorder or change bucket" title="Drag to reorder; arrow keys also work"><span aria-hidden="true">⋮</span></button>';
+   echo '<article class="pick-card'.($isPicked?' picked':'').($isDnp?' do-not-pick':'').'" data-team="'.h($num).'"'.($editor&&!$isPicked?' draggable="true"':'').'><div class="pick-card-check">';
+   if($editor&&!$isPicked)echo '<button type="button" class="pick-drag" aria-label="Drag team '.h($num).' to reorder or change bucket" title="Drag to reorder; arrow keys also work"><span aria-hidden="true">⋮</span></button>';
    echo '</div>';
    echo '<div class="pick-card-title"><h2><a href="/?p=team&n='.h($num).'">'.h($num).' · '.h($card['name']?:'Unnamed team').'</a></h2></div>';
    echo '<div class="pick-card-picked">';
@@ -395,7 +405,6 @@ elseif($p==='picks'){
    }
    echo '</div></section>';
   }
-  echo '</div></div>';
   if(!$cards)echo '<p>No teams have been loaded for this event.</p>';
   if($editor)echo '<form id="pickOrderForm" method="post" action="/?p=pick_order">'.csrf().'<input type="hidden" name="order" id="pickOrder"></form>';
   echo '<script src="'.h(asset('pick-list.js')).'" defer></script>';
