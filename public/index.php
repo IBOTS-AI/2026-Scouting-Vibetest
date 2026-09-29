@@ -356,12 +356,11 @@ elseif($p==='match'){
  page('Qualification Match Q'.$number,true);
  echo '<p><a href="/?p=matches">← Match schedule</a> · '.h($e['name']).'</p>';
  if($match['video_url'])echo '<p><a href="'.h($match['video_url']).'">Watch match video</a></p>';
- echo '<p class="match-prediction-note">Prediction adds each alliance member’s average match score across submitted reports.'.($predicted['R']===null||$predicted['B']===null?' All three teams need a score average for a prediction.':'').'</p>';
  echo '<div class="match-alliances">';
  foreach(['R'=>'Red','B'=>'Blue'] as $initial=>$name){
-  $alliance=$initial==='R'?'red':'blue';echo '<section class="match-alliance '.h($alliance).'"><h2 class="match-alliance-header"><span>'.h($name).' Alliance</span><span class="match-header-score">Predicted total: <strong>'.h($predicted[$initial]===null?'—':number_format($predicted[$initial],1)).'</strong></span>';
+  $alliance=$initial==='R'?'red':'blue';echo '<section class="match-alliance '.h($alliance).'"><h2 class="match-alliance-header"><span class="match-alliance-name">'.h($name).' Alliance</span><span class="match-header-summary"><span class="match-header-score">Predicted Overall Score: <strong>'.h($predicted[$initial]===null?'—':number_format($predicted[$initial],1)).'</strong></span>';
   if($winner===$initial)echo '<span class="predicted-winner">Predicted Winner</span>';
-  echo '</h2>';
+  echo '</span></h2>';
   for($i=1;$i<=3;$i++){
    $position=$initial.$i;$slot=$byPosition[$position]??null;
    if(!$slot){echo '<div class="match-team empty"><h3>'.h($position).' · Team not assigned</h3></div>';continue;}
