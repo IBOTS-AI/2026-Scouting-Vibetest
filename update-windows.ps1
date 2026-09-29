@@ -16,6 +16,7 @@ $stamp = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 $files = @(
     'Dockerfile',
     'public/index.php',
+    'public/team-charts.php',
     'public/style.css',
     'public/dashboard.js',
     'public/auto-path.js',
@@ -49,6 +50,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Docker Compose failed to start the updated web
 
 $checks = @{
     'public/index.php' = '/var/www/html/index.php'
+    'public/team-charts.php' = '/var/www/html/team-charts.php'
     'public/style.css' = '/var/www/html/style.css'
     'public/dashboard.js' = '/var/www/html/dashboard.js'
     'public/auto-path.js' = '/var/www/html/auto-path.js'
