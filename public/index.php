@@ -351,9 +351,14 @@ elseif($p==='match'){
  $byPosition=[];foreach($slots as $slot)$byPosition[$slot['position']]=$slot;
  $reports=query('SELECT s.team_number,sc.data FROM scouting sc JOIN slots s ON s.id=sc.slot_id JOIN matches m ON m.id=s.match_id WHERE m.event_id=? AND sc.status=\'submitted\' ',[$e['id']])->fetchAll(PDO::FETCH_ASSOC);
  $byTeam=[];foreach($reports as $report)$byTeam[$report['team_number']][]=json_decode($report['data'],true)?:[];
+ $predicted=[];foreach(['R','B'] as $alliance){$sum=0;$complete=true;for($i=1;$i<=3;$i++){$slot=$byPosition[$alliance.$i]??null;$average=$slot?metricAverage($byTeam[(int)$slot['team_number']]??[],'match_score'):null;if($average===null){$complete=false;break;}$sum+=$average;}$predicted[$alliance]=$complete?round($sum,1):null;}
+ $winner=$predicted['R']!==null&&$predicted['B']!==null&&$predicted['R']!==$predicted['B']?($predicted['R']>$predicted['B']?'R':'B'):null;
  page('Qualification Match Q'.$number,true);
  echo '<p><a href="/?p=matches">← Match schedule</a> · '.h($e['name']).'</p>';
  if($match['video_url'])echo '<p><a href="'.h($match['video_url']).'">Watch match video</a></p>';
+ echo '<div class="match-predictions" aria-label="Predicted alliance scores">';
+ foreach(['R'=>'Red','B'=>'Blue'] as $initial=>$name){$side=$initial==='R'?'red':'blue';echo '<div class="match-prediction '.h($side).'"><span>'.h($name).' predicted total</span><strong>'.h($predicted[$initial]===null?'—':number_format($predicted[$initial],1)).'</strong>';if($winner===$initial)echo '<b class="predicted-winner">Predicted Winner</b>';echo '</div>';}
+ echo '</div><p class="match-prediction-note">Prediction adds each alliance member’s average match score across submitted reports.'.($predicted['R']===null||$predicted['B']===null?' All three teams need a score average for a prediction.':'').'</p>';
  echo '<div class="match-alliances">';
  foreach(['R'=>'Red','B'=>'Blue'] as $initial=>$name){
   $alliance=$initial==='R'?'red':'blue';echo '<section class="match-alliance '.h($alliance).'"><h2>'.h($name).' Alliance</h2>';
