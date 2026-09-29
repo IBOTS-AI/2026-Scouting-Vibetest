@@ -28,4 +28,5 @@ CREATE TABLE IF NOT EXISTS strategy_plans (id uuid PRIMARY KEY, event_id uuid NO
 CREATE TABLE IF NOT EXISTS site_settings (id integer PRIMARY KEY CHECK(id=1), dark_mode boolean NOT NULL DEFAULT false, logo_mime text, logo_base64 text, logo_uploaded_at timestamptz, site_title text NOT NULL DEFAULT '2370 · Scouting');
 ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS site_title text NOT NULL DEFAULT '2370 · Scouting';
 ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS pit_choices jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS highlighted_team integer NOT NULL DEFAULT 2370;
 INSERT INTO site_settings(id) VALUES(1) ON CONFLICT DO NOTHING;
