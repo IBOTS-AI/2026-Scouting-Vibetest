@@ -15,7 +15,12 @@
       status.textContent = 'Choose up to 12 tags.'; return;
     }
     const chip = document.createElement('span');
-    chip.className = 'team-tag tag-tone-' + choice.selectedOptions[0].dataset.tone;
+    chip.className = 'team-tag';
+    const color = choice.selectedOptions[0].dataset.color || '#d9f3f0';
+    const rgb = [1, 3, 5].map(index => parseInt(color.slice(index, index + 2), 16));
+    chip.style.background = color;
+    chip.style.borderColor = color;
+    chip.style.color = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000 > 150 ? '#172438' : '#ffffff';
     chip.dataset.tag = tag;
     const input = document.createElement('input');
     input.type = 'hidden'; input.name = 'tags[]'; input.value = tag;
