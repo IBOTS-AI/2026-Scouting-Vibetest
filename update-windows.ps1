@@ -22,6 +22,7 @@ $files = @(
     'public/strategy.js',
     'public/pick-list.js',
     'public/pit-tags.js',
+    'public/pit-config.js',
     'sql/schema.sql',
     'fixtures/wpi-2026.json'
 )
@@ -54,6 +55,7 @@ $checks = @{
     'public/strategy.js' = '/var/www/html/strategy.js'
     'public/pick-list.js' = '/var/www/html/pick-list.js'
     'public/pit-tags.js' = '/var/www/html/pit-tags.js'
+    'public/pit-config.js' = '/var/www/html/pit-config.js'
     'sql/schema.sql' = '/var/www/sql/schema.sql'
     'fixtures/wpi-2026.json' = '/var/www/fixtures/wpi-2026.json'
 }
