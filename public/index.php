@@ -368,9 +368,8 @@ elseif($p==='picks'){
   echo '<p>'.h($e['name']).' · '.h(count($cards)).' teams across five pick buckets. '.($editor?'Drag the three-dot handle to reorder or move teams between buckets. Use arrow keys on the handle for keyboard movement.':'').'</p><div class="pick-board-scroll"><div class="pick-board" id="pickBoard">';
   foreach($groups as $bucket=>$bucketCards){
    echo '<section class="pick-bucket" data-bucket="'.h($bucket).'"><div class="pick-bucket-head"><h2>'.h($bucket).'</h2><span>'.h(count($bucketCards)).' teams</span></div><div class="pick-cards" data-bucket="'.h($bucket).'">';
-   $position=0;
    foreach($bucketCards as $card){
-   $num=(int)$card['number'];$isPicked=picked($card['picked']);$isDnp=$bucket==='DNP';$position++;
+   $num=(int)$card['number'];$isPicked=picked($card['picked']);$isDnp=$bucket==='DNP';
    $entries=$byTeam[$num]??[];$metrics=[];
    foreach(['match_score'=>'Avg Match Score','auto_score'=>'Avg Autonomous','teleop_score'=>'Avg Teleop','defense_rating'=>'Avg Defensive Ability','defensive_vulnerability'=>'Avg Defensive Vulnerability'] as $key=>$label)$metrics[$label]=metricAverage($entries,$key,in_array($key,['defense_rating','defensive_vulnerability'],true)?5.0:null);
    echo '<article class="pick-card'.($isPicked?' picked':'').($isDnp?' do-not-pick':'').'" data-team="'.h($num).'"'.($editor?' draggable="true"':'').'><div class="pick-card-check">';
@@ -378,23 +377,25 @@ elseif($p==='picks'){
    echo '</div>';
    if($card['uploaded_at'])echo '<img class="pick-card-photo" src="/?p=robot_photo&n='.h($num).'&v='.rawurlencode($card['uploaded_at']).'" alt="Robot photo for team '.h($num).'" loading="lazy">';
    else echo '<div class="pick-card-photo placeholder pick-photo-empty" role="img" aria-label="No robot photo for team '.h($num).'"><svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path d="M24 5v6m-4-6h8M10 18h28v23H10zM6 24h4m28 0h4" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="27" r="2" fill="currentColor"/><circle cx="30" cy="27" r="2" fill="currentColor"/><path d="M18 35h12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg><span>No photo</span></div>';
-   echo '<div class="pick-card-content"><div class="pick-card-title"><h2><a href="/?p=team&n='.h($num).'">'.h($num).' · '.h($card['name']?:'Unnamed team').'</a></h2><span'.(!$isDnp?' class="pick-rank"':'').'>'.($isDnp?'DNP':'Pick #'.h($position)).'</span></div>';
-   echo '<div class="pick-stats">';
+   echo '<div class="pick-card-title"><h2><a href="/?p=team&n='.h($num).'">'.h($num).' · '.h($card['name']?:'Unnamed team').'</a></h2></div>';
+   echo '<button type="button" class="pick-expand" aria-expanded="false" aria-controls="pick-details-'.h($num).'" aria-label="Show details for team '.h($num).'" title="Show details"><span aria-hidden="true">⌄</span></button>';
+   echo '<div class="pick-card-content" id="pick-details-'.h($num).'" hidden><div class="pick-stats">';
    $meta=robotMeta(json_decode($card['pit_data']??'{}',true)?:[]);
    echo '<span class="pick-stat"><span>Robot Meta:</span><strong>'.h($meta?:'—').'</strong></span>';
    foreach($metrics as $label=>$value)echo '<span class="pick-stat"><span>'.h($label).':</span><strong>'.h($value===null?'—':number_format($value,1)).'</strong></span>';
-   echo '<span class="pick-stat"><span>Reports:</span><strong>'.h(count($entries)).'</strong></span></div></div><div class="pick-card-flags">';
+   echo '<span class="pick-stat"><span>Reports:</span><strong>'.h(count($entries)).'</strong></span></div><div class="pick-card-flags">';
    if($editor)echo '<form method="post" action="/?p=pick_status">'.csrf().'<input type="hidden" name="team" value="'.h($num).'"><label title="Mark team picked"><input type="checkbox" name="picked" value="1" aria-label="Team '.h($num).' picked"'.($isPicked?' checked':'').' onchange="this.form.requestSubmit()"><span>Picked</span></label></form>';
    else echo '<span>'.($isPicked?'✓ Picked':'').'</span>';
    if($editor)echo '<form method="post" action="/?p=pick_dnp">'.csrf().'<input type="hidden" name="team" value="'.h($num).'"><label><input type="checkbox" name="dnp" value="1" aria-label="Do Not Pick team '.h($num).'"'.(picked($card['do_not_pick'])?' checked':'').' onchange="this.form.requestSubmit()"><span>Do Not Pick</span></label></form>';
    else echo '<span>'.(picked($card['do_not_pick'])?'Do Not Pick':'').'</span>';
-   echo '</div></article>';
+   echo '</div></div></article>';
    }
    echo '</div></section>';
   }
   echo '</div></div>';
   if(!$cards)echo '<p>No teams have been loaded for this event.</p>';
-  if($editor)echo '<form id="pickOrderForm" method="post" action="/?p=pick_order">'.csrf().'<input type="hidden" name="order" id="pickOrder"></form><script src="'.h(asset('pick-list.js')).'" defer></script>';
+  if($editor)echo '<form id="pickOrderForm" method="post" action="/?p=pick_order">'.csrf().'<input type="hidden" name="order" id="pickOrder"></form>';
+  echo '<script src="'.h(asset('pick-list.js')).'" defer></script>';
   endpage();
  }
 }
