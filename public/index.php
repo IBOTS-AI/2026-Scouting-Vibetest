@@ -432,8 +432,9 @@ elseif($p==='match'){
    $position=$initial.$i;$slot=$byPosition[$position]??null;
    if(!$slot){echo '<div class="match-team empty"><h3>'.h($name.' '.$i).' · Team not assigned</h3></div>';continue;}
    $teamNumber=(int)$slot['team_number'];$entries=$byTeam[$teamNumber]??[];$pit=json_decode($slot['pit_data']??'{}',true)?:[];
-   echo '<article class="match-team"><div class="match-team-head"><h3><span class="match-position">'.h($name.' '.$i).'</span><a href="/?p=team&n='.h($teamNumber).'">'.h($teamNumber).' · '.h($slot['name']?:'Unnamed team').'</a></h3></div>';
+   echo '<article class="match-team"><div class="match-team-head"><h3><span class="match-position">'.h($name.' '.$i).'</span><a href="/?p=team&n='.h($teamNumber).'">'.h($teamNumber).' · '.h($slot['name']?:'Unnamed team').'</a></h3>';
    if($slot['uploaded_at'])echo '<img class="match-team-photo" src="/?p=robot_photo&n='.h($teamNumber).'&v='.rawurlencode($slot['uploaded_at']).'" alt="Robot for team '.h($teamNumber).'" loading="lazy">';
+   echo '</div>';
    if($tags=pitTags($pit)){echo '<div class="team-tags">';foreach($tags as $tag)echo '<span class="team-tag"'.tagStyle($tag).'>'.h($tag).'</span>';echo '</div>';}
    echo '<div class="match-team-metrics">';
    foreach(['match_score'=>'Avg match','auto_score'=>'Avg auto','teleop_score'=>'Avg teleop','defense_rating'=>'Defensive ability','defensive_vulnerability'=>'Defensive vulnerability'] as $key=>$label){$value=metricAverage($entries,$key,in_array($key,['defense_rating','defensive_vulnerability'],true)?5.0:null);echo '<div><span>'.h($label).'</span><strong>'.h($value===null?'—':number_format($value,1)).'</strong></div>';}
