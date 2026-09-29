@@ -328,8 +328,9 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
   $data=[];
   foreach(['auto_score','teleop_score','defense_rating','defensive_vulnerability'] as $k){
    $value=trim((string)($_POST[$k]??''));$rating=in_array($k,['defense_rating','defensive_vulnerability'],true);$limit=$rating?5:9999;
+   if($rating&&is_numeric($value)&&(float)$value===-0.1)$value='';
    if($value!==''&&(!is_numeric($value)||(float)$value<0||(float)$value>$limit||($rating&&abs((float)$value*10-round((float)$value*10))>0.00001))){http_response_code(400);exit('Invalid numeric scouting value');}
-   $data[$k]=$value;
+   $data[$k]=$rating&&$value===''?null:$value;
   }
   $data['match_score']=$data['auto_score']!==''&&$data['teleop_score']!==''?(float)$data['auto_score']+(float)$data['teleop_score']:'';
   $data['auto_path']=cleanAutoPath((string)($_POST['auto_path']??'[]'));
@@ -462,12 +463,15 @@ elseif($p==='scout'){
  $d=json_decode($s['data']??'{}',true)?:[];$editable=$s['record_status']!=='submitted'||role('admin','mentor');
  page(($s['stage']==='elimination'?($s['label']?:'Elimination Match '.$s['match_number']):'Q'.$s['match_number']).' · '.$s['position'].' · Team '.$s['team_number']);
  if($s['video_url'])echo '<p><a href="'.h($s['video_url']).'">Watch match video</a></p>';
- if(!$editable){pathWidget(is_array($d['auto_path']??null)?$d['auto_path']:[],false);echo '<p>Submitted and locked. Ask a mentor to correct this record.</p>';foreach($d as $k=>$v)if(!in_array($k,['auto_path','demo','match_score'],true))echo '<p><b>'.h($k).':</b> '.h($v).'</p>';}
+ if(!$editable){pathWidget(is_array($d['auto_path']??null)?$d['auto_path']:[],false);echo '<p>Submitted and locked. Ask a mentor to correct this record.</p>';foreach($d as $k=>$v)if(!in_array($k,['auto_path','demo','match_score'],true))echo '<p><b>'.h($k).':</b> '.h(in_array($k,['defense_rating','defensive_vulnerability'],true)&&($v===null||$v==='')?'N/A':$v).'</p>';}
  else{
   echo '<form method="post" action="/?p=scout" class="scout-form">'.csrf().'<input type="hidden" name="slot" value="'.h($s['id']).'"><input type="hidden" name="version" value="'.h($s['version']??0).'">';
   pathWidget(is_array($d['auto_path']??null)?$d['auto_path']:[],true);
   foreach(['auto_score'=>'Autonomous score','teleop_score'=>'Teleop score'] as $k=>$label)echo '<label>'.h($label).'<input type="number" min="0" max="9999" step="1" name="'.h($k).'" value="'.(is_numeric($d[$k]??null)?field($d,$k):'').'"></label>';
-  foreach(['defense_rating'=>'Defensive Ability','defensive_vulnerability'=>'Defensive Vulnerability (5 = not vulnerable)'] as $k=>$label){$value=is_numeric($d[$k]??null)?max(0,min(5,(float)$d[$k])):0;echo '<label class="rating-label">'.h($label).' <output for="'.h($k).'" id="'.h($k).'Value">'.h(number_format($value,1)).'</output><input type="range" min="0" max="5" step="0.1" name="'.h($k).'" id="'.h($k).'" value="'.h($value).'"></label>';}
+  foreach(['defense_rating'=>'Defensive Ability','defensive_vulnerability'=>'Defensive Vulnerability (5 = not vulnerable)'] as $k=>$label){
+   $value=is_numeric($d[$k]??null)&&(float)$d[$k]>=0?max(0,min(5,(float)$d[$k])):-0.1;$display=$value<0?'N/A':number_format($value,1);
+   echo '<div class="rating-field"><label class="rating-label" for="'.h($k).'">'.h($label).' <output for="'.h($k).'" id="'.h($k).'Value">'.h($display).'</output></label><div class="rating-control"><button type="button" class="rating-na" data-rating="'.h($k).'" aria-label="Set '.h($label).' to not assessed">N/A</button><input type="range" min="-0.1" max="5" step="0.1" name="'.h($k).'" id="'.h($k).'" value="'.h($value).'" aria-valuetext="'.h($display).'" aria-describedby="'.h($k).'Help"></div><small id="'.h($k).'Help">Far left: N/A (not assessed, excluded from averages). Ratings: 0–5 in 0.1 steps.</small></div>';
+  }
   foreach(['endgame'=>'Endgame','defense'=>'Defense observations','penalties'=>'Penalties','breakdown'=>'Breakdown / reliability','notes'=>'Observations'] as $k=>$label)echo '<label>'.h($label).'<textarea name="'.h($k).'">'.field($d,$k).'</textarea></label>';
   echo '<button>Save draft</button> <button name="submit" value="1">Submit</button></form>';
  }
