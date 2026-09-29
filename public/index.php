@@ -160,7 +160,7 @@ function page(string $title,bool $wide=false,bool $showHeading=true): void {
  if($active&&preg_match('/^(\d{4})/',(string)($active['event_key']??''),$match))$year=$match[1];
  echo '<!doctype html><html lang="en"'.(picked($settings['dark_mode'])?' class="dark-mode"':'').'><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h($title).' · '.h($settings['site_title']).'</title><link rel="stylesheet" href="'.h(asset('style.css')).'"><header><div class="header-identity">';
  if($settings['logo_uploaded_at'])echo '<img class="site-logo" src="/?p=site_logo&v='.rawurlencode($settings['logo_uploaded_at']).'" alt="Scouting logo">';
- echo '<strong>'.h($settings['site_title']).'</strong>'.($active?'<span class="selected-event">Selected Event: '.h(trim($year.' '.$active['name'])).'</span>':'').'</div><nav><a href="/?p=home">Dashboard</a><a href="/?p=matches">Matches</a><a href="/?p=teams">Teams</a><a href="/?p=strategy">Strategy</a><a href="/?p=picks">Pick list</a><a href="/?p=admin">Admin</a><a href="/?p=logout">Log out</a></nav></header><main'.($wide?' class="wide"':'').'>'.($showHeading?'<h1>'.h($title).'</h1>':'');
+ echo '<strong>'.h($settings['site_title']).'</strong></div>'.($active?'<span class="selected-event">Selected Event: '.h(trim($year.' '.$active['name'])).'</span>':'<span class="selected-event" aria-hidden="true"></span>').'<nav><a href="/?p=home">Dashboard</a><a href="/?p=matches">Matches</a><a href="/?p=teams">Teams</a><a href="/?p=strategy">Strategy</a><a href="/?p=picks">Pick list</a><a href="/?p=admin">Admin</a><a href="/?p=logout">Log out</a></nav></header><main'.($wide?' class="wide"':'').'>'.($showHeading?'<h1>'.h($title).'</h1>':'');
  if(isset($_SESSION['flash'])) {echo '<aside class="'.h($_SESSION['flash_type']??'notice').'">'.h($_SESSION['flash']).'</aside>';unset($_SESSION['flash'],$_SESSION['flash_type']);}
 }
 function renderMatchSection(string $eventId,string $stage): void {
@@ -178,9 +178,9 @@ function renderMatchSection(string $eventId,string $stage): void {
   else echo '<span class="no-video">No Video</span>';
   echo '</td>';
   foreach(['R1','R2','R3','B1','B2','B3'] as $pos){
-   $alliance=$pos[0]==='R'?'red':'blue';$slot=query('SELECT * FROM slots WHERE match_id=? AND position=?',[$m['id'],$pos])->fetch(PDO::FETCH_ASSOC);
+   $alliance=$pos[0]==='R'?'red':'blue';$slot=query('SELECT s.*,sc.status AS scouting_status FROM slots s LEFT JOIN scouting sc ON sc.slot_id=s.id WHERE s.match_id=? AND s.position=?',[$m['id'],$pos])->fetch(PDO::FETCH_ASSOC);
    echo '<td class="'.$alliance.'-cell">';
-   if($slot)echo '<div class="slot-line"><strong>'.h($slot['team_number']).'</strong><a class="scout-button" href="/?p=scout&id='.h($slot['id']).'">Scout</a></div>';
+   if($slot)echo '<div class="slot-line"><strong>'.h($slot['team_number']).'</strong><a class="scout-button" href="/?p=scout&id='.h($slot['id']).'">Scout</a><span class="scouting-status">'.($slot['scouting_status']==='submitted'?'Scouted 1 time':'Not Scouted Yet').'</span></div>';
    else echo '—';
    echo '</td>';
   }
