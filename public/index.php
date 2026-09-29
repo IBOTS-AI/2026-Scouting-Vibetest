@@ -363,12 +363,12 @@ elseif($p==='match'){
   echo '</span></h2>';
   for($i=1;$i<=3;$i++){
    $position=$initial.$i;$slot=$byPosition[$position]??null;
-   if(!$slot){echo '<div class="match-team empty"><h3>'.h($position).' · Team not assigned</h3></div>';continue;}
+   if(!$slot){echo '<div class="match-team empty"><h3>'.h($name.' '.$i).' · Team not assigned</h3></div>';continue;}
    $teamNumber=(int)$slot['team_number'];$entries=$byTeam[$teamNumber]??[];$pit=json_decode($slot['pit_data']??'{}',true)?:[];
-   echo '<article class="match-team"><div class="match-team-head"><div><small>'.h($position).'</small><h3><a href="/?p=team&n='.h($teamNumber).'">'.h($teamNumber).' · '.h($slot['name']?:'Unnamed team').'</a></h3></div><a class="scout-button" href="/?p=scout&id='.h($slot['id']).'">Scout</a></div>';
+   echo '<article class="match-team"><div class="match-team-head"><h3><span class="match-position">'.h($name.' '.$i).'</span><a href="/?p=team&n='.h($teamNumber).'">'.h($teamNumber).' · '.h($slot['name']?:'Unnamed team').'</a></h3></div>';
    if($slot['uploaded_at'])echo '<img class="match-team-photo" src="/?p=robot_photo&n='.h($teamNumber).'&v='.rawurlencode($slot['uploaded_at']).'" alt="Robot for team '.h($teamNumber).'" loading="lazy">';
    if($tags=pitTags($pit)){echo '<div class="team-tags">';foreach($tags as $tag)echo '<span class="team-tag tag-tone-'.h(tagTone($tag)).'">'.h($tag).'</span>';echo '</div>';}
-   echo '<p class="match-report-count">'.h(count($entries)).' submitted match reports</p><div class="match-team-metrics">';
+   echo '<div class="match-team-metrics">';
    foreach(['match_score'=>'Avg match','auto_score'=>'Avg auto','teleop_score'=>'Avg teleop','defense_rating'=>'Defensive ability','defensive_vulnerability'=>'Defensive vulnerability'] as $key=>$label){$value=metricAverage($entries,$key,in_array($key,['defense_rating','defensive_vulnerability'],true)?5.0:null);echo '<div><span>'.h($label).'</span><strong>'.h($value===null?'—':number_format($value,1)).'</strong></div>';}
    echo '</div>';
    if($slot['report_status']==='submitted'){$current=json_decode($slot['report_data']??'{}',true)?:[];echo '<p class="match-current"><b>Q'.h($number).' scouted:</b> Auto '.h(is_numeric($current['auto_score']??null)?$current['auto_score']:'—').' · Teleop '.h(is_numeric($current['teleop_score']??null)?$current['teleop_score']:'—').' · Total '.h(is_numeric($current['match_score']??null)?$current['match_score']:'—').'</p>';}
