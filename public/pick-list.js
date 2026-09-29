@@ -1,7 +1,18 @@
 (() => {
   const board = document.getElementById('pickBoard');
   const form = document.getElementById('pickOrderForm');
-  if (!board || !form) return;
+  if (!board) return;
+  board.addEventListener('click', event => {
+    const button = event.target.closest('.pick-expand');
+    if (!button) return;
+    const panel = document.getElementById(button.getAttribute('aria-controls'));
+    if (!panel) return;
+    panel.hidden = !panel.hidden;
+    button.setAttribute('aria-expanded', String(!panel.hidden));
+    button.setAttribute('aria-label', (panel.hidden ? 'Show' : 'Hide') + ' details for team ' + button.closest('.pick-card').dataset.team);
+    button.title = panel.hidden ? 'Show details' : 'Hide details';
+  });
+  if (!form) return;
   const buckets = [...board.querySelectorAll('.pick-bucket')];
   const cardsIn = bucket => [...bucket.querySelectorAll('.pick-card')];
   const layout = () => Object.fromEntries(buckets.map(bucket => [bucket.dataset.bucket, cardsIn(bucket).map(card => Number(card.dataset.team))]));
