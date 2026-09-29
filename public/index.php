@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 session_start();
+require_once __DIR__.'/team-charts.php';
 function db(): PDO { static $db; if (!$db) { $db = new PDO(getenv('DATABASE_URL'), getenv('DB_USER'), getenv('DB_PASSWORD'), [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]); $db->exec(file_get_contents('/var/www/sql/schema.sql')); if (!(int)$db->query('SELECT count(*) FROM users')->fetchColumn()) { $q=$db->prepare('INSERT INTO users(id,name,password_hash,role) VALUES(?,?,?,?)');$q->execute([uuid(),'admin',password_hash('change-me-now',PASSWORD_DEFAULT),'admin']); } } return $db; }
 function uuid(): string { $x=bin2hex(random_bytes(16));return substr($x,0,8).'-'.substr($x,8,4).'-4'.substr($x,13,3).'-'.dechex((hexdec($x[16])&3)|8).substr($x,17,3).'-'.substr($x,20); }
 function query(string $sql,array $args=[]): PDOStatement { $q=db()->prepare($sql);$q->execute($args);return $q; }
@@ -512,6 +513,7 @@ elseif($p==='team'||$p==='pit'){
   echo '<p><a class="button" href="/?p=pit&n='.h($n).'">Pit Scout</a></p>';
   if($photo)echo '<img class="pit-photo" src="/?p=robot_photo&n='.h($n).'&v='.rawurlencode($photo['uploaded_at']).'" alt="Robot photo for team '.h($n).'">';
   $reports=query('SELECT m.match_number,m.stage,m.label,s.position,sc.data FROM slots s JOIN matches m ON m.id=s.match_id JOIN scouting sc ON sc.slot_id=s.id WHERE m.event_id=? AND s.team_number=? AND sc.status=\'submitted\' ORDER BY m.stage DESC,m.match_number',[$e['id'],$n])->fetchAll(PDO::FETCH_ASSOC);
+  teamPerformanceCharts($reports);
   $paths=[];foreach($reports as $r){$v=json_decode($r['data'],true)?:[];if(!empty($v['auto_path'])&&is_array($v['auto_path']))$paths[]=['label'=>matchLabel($r).' · '.$r['position'],'strokes'=>$v['auto_path']];}
   echo '<section class="path-widget"><h2>Combined autonomous paths</h2>';
   if($paths)echo '<p>Each match has its own color. Paths are drawn over the same field image.</p><canvas id="teamPathsCanvas" width="800" height="480" data-paths="'.h(json_encode($paths)).'" aria-label="Combined autonomous paths for team '.h($n).'"></canvas><div id="pathLegend" class="path-legend"></div>';
