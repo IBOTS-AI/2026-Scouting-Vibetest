@@ -10,6 +10,11 @@ CREATE TABLE IF NOT EXISTS slots (id uuid PRIMARY KEY, match_id uuid REFERENCES 
 CREATE TABLE IF NOT EXISTS scouting (id uuid PRIMARY KEY, slot_id uuid UNIQUE REFERENCES slots(id), scout_id uuid REFERENCES users(id), data jsonb NOT NULL DEFAULT '{}', status text NOT NULL DEFAULT 'draft', version integer NOT NULL DEFAULT 1, updated_at timestamptz DEFAULT now(), sync_state text NOT NULL DEFAULT 'pending');
 CREATE TABLE IF NOT EXISTS pit (id uuid PRIMARY KEY, event_id uuid REFERENCES events(id), team_number integer NOT NULL, author_id uuid REFERENCES users(id), data jsonb NOT NULL DEFAULT '{}', updated_at timestamptz DEFAULT now(), sync_state text NOT NULL DEFAULT 'pending', UNIQUE(event_id,team_number));
 CREATE TABLE IF NOT EXISTS audit (id uuid PRIMARY KEY, record_type text NOT NULL, record_id uuid NOT NULL, actor_id uuid REFERENCES users(id), prior_data jsonb, new_data jsonb, created_at timestamptz DEFAULT now());
+-- Remove synthetic match reports created by the former WPI demo loader.
+-- Official matches, teams, manually entered reports, and pit records remain.
+DELETE FROM audit WHERE record_type='scouting' AND record_id IN (SELECT id FROM scouting WHERE data->>'demo'='true');
+UPDATE slots SET status=CASE WHEN assigned_user IS NULL THEN 'unassigned' ELSE 'assigned' END WHERE id IN (SELECT slot_id FROM scouting WHERE data->>'demo'='true');
+DELETE FROM scouting WHERE data->>'demo'='true';
 CREATE TABLE IF NOT EXISTS picklist (event_id uuid REFERENCES events(id), team_number integer, rank integer NOT NULL, note text NOT NULL DEFAULT '', do_not_pick boolean DEFAULT false, PRIMARY KEY(event_id,team_number));
 ALTER TABLE picklist ADD COLUMN IF NOT EXISTS picked boolean NOT NULL DEFAULT false;
 ALTER TABLE picklist ADD COLUMN IF NOT EXISTS bucket text NOT NULL DEFAULT 'B';
