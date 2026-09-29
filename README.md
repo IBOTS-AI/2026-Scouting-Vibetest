@@ -35,7 +35,7 @@ Robot photos (JPEG, PNG, WebP up to 4 MB) are saved in the local PostgreSQL data
 
 The Admin page confirms the selected event and loaded record counts. The Matches table uses full page width, red and blue alliance columns, and a Scout button in each populated position.
 
-The Match schedule keeps the Q-number column narrow. Click Q1, Q2, and so on to open a match detail page with Red and Blue alliance cards side by side. Each scheduled team shows its name, pit tags, submitted report count, event averages for match, auto, teleop, defense ability, and vulnerability, plus that match's submitted auto/teleop/total values when available. Each team has links to its profile and scouting form. On narrow screens, the alliance cards stack vertically.
+The Match schedule keeps the Q-number column narrow. Click Q1, Q2, and so on to open a match detail page with Red and Blue alliance cards side by side. Each scheduled team shows its position as Red 1–3 or Blue 1–3 beside its linked team name, pit tags, event averages for match, auto, teleop, defense ability, and vulnerability, plus that match's submitted auto/teleop/total values when available. The match detail cards omit submitted report counts and Scout buttons; use the Match schedule’s Scout buttons to enter reports. On narrow screens, the alliance cards stack vertically.
 
 Match numbers are centered in their schedule column. Each colored alliance card header places the alliance name, its **Predicted Overall Score** (the sum of its three team average match scores), and a green **Predicted Winner** badge for the higher total together. A prediction waits until all three teams on both alliances have a submitted score average; equal totals do not show a winner.
 
