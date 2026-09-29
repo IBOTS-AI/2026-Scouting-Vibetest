@@ -1,7 +1,11 @@
 CREATE TABLE IF NOT EXISTS users (id uuid PRIMARY KEY, name text NOT NULL, password_hash text NOT NULL, role text NOT NULL CHECK(role IN ('admin','mentor','scout','pit','drive')), position text, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS events (id uuid PRIMARY KEY, name text NOT NULL, event_key text UNIQUE, active boolean DEFAULT true);
 CREATE TABLE IF NOT EXISTS teams (event_id uuid REFERENCES events(id), number integer, name text NOT NULL DEFAULT '', PRIMARY KEY(event_id,number));
-CREATE TABLE IF NOT EXISTS matches (id uuid PRIMARY KEY, event_id uuid REFERENCES events(id), match_number integer NOT NULL, video_url text, UNIQUE(event_id,match_number));
+CREATE TABLE IF NOT EXISTS matches (id uuid PRIMARY KEY, event_id uuid REFERENCES events(id), match_number integer NOT NULL, video_url text, stage text NOT NULL DEFAULT 'qualification', label text);
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS stage text NOT NULL DEFAULT 'qualification';
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS label text;
+ALTER TABLE matches DROP CONSTRAINT IF EXISTS matches_event_id_match_number_key;
+CREATE UNIQUE INDEX IF NOT EXISTS matches_event_stage_number_idx ON matches(event_id,stage,match_number);
 CREATE TABLE IF NOT EXISTS slots (id uuid PRIMARY KEY, match_id uuid REFERENCES matches(id), position text NOT NULL CHECK(position IN ('R1','R2','R3','B1','B2','B3')), team_number integer NOT NULL, assigned_user uuid REFERENCES users(id), status text NOT NULL DEFAULT 'unassigned', UNIQUE(match_id,position));
 CREATE TABLE IF NOT EXISTS scouting (id uuid PRIMARY KEY, slot_id uuid UNIQUE REFERENCES slots(id), scout_id uuid REFERENCES users(id), data jsonb NOT NULL DEFAULT '{}', status text NOT NULL DEFAULT 'draft', version integer NOT NULL DEFAULT 1, updated_at timestamptz DEFAULT now(), sync_state text NOT NULL DEFAULT 'pending');
 CREATE TABLE IF NOT EXISTS pit (id uuid PRIMARY KEY, event_id uuid REFERENCES events(id), team_number integer NOT NULL, author_id uuid REFERENCES users(id), data jsonb NOT NULL DEFAULT '{}', updated_at timestamptz DEFAULT now(), sync_state text NOT NULL DEFAULT 'pending', UNIQUE(event_id,team_number));
