@@ -37,7 +37,7 @@ The Admin page confirms the selected event and loaded record counts. The Matches
 
 The Match schedule keeps the Q-number column narrow. Click Q1, Q2, and so on to open a match detail page with Red and Blue alliance cards side by side. Each scheduled team shows its name, pit tags, submitted report count, event averages for match, auto, teleop, defense ability, and vulnerability, plus that match's submitted auto/teleop/total values when available. Each team has links to its profile and scouting form. On narrow screens, the alliance cards stack vertically.
 
-Match numbers are centered in their schedule column. Each colored alliance card header shows the sum of its three team average match scores; the higher total gets a green **Predicted Winner** badge in that header. A prediction waits until all three teams on both alliances have a submitted score average; equal totals do not show a winner.
+Match numbers are centered in their schedule column. Each colored alliance card header places the alliance name, its **Predicted Overall Score** (the sum of its three team average match scores), and a green **Predicted Winner** badge for the higher total together. A prediction waits until all three teams on both alliances have a submitted score average; equal totals do not show a winner.
 
 Admin → Appearance accepts a JPEG, PNG, or WebP header logo up to 4 MB and has a site-wide Dark Mode switch. Both settings persist in local PostgreSQL; the logo appears beside “2370 · Scouting” on signed-in pages. The Strategy page opens directly with its editor and saved plans, without an introductory paragraph.
 
