@@ -122,6 +122,26 @@ function pitChoices(): array {
 function pitChoicesWithSaved(array $choices,string $key,string $saved): array {
  $options=$choices[$key];if($saved!==''&&!in_array($saved,$options,true))$options[]=$saved;return $options;
 }
+function pitTagColors(): array {
+ static $colors;if($colors!==null)return $colors;
+ $saved=json_decode(query('SELECT pit_choices FROM site_settings WHERE id=1')->fetchColumn()?:'{}',true)?:[];
+ return $colors=is_array($saved['tag_colors']??null)?$saved['tag_colors']:[];
+}
+function tagColor(string $tag): string {
+ $defaults=['Defense'=>'#d9edff','Passing'=>'#fff0c6','L3 Climber'=>'#eee3ff','Offense'=>'#ffe1e4'];
+ $color=pitTagColors()[$tag]??($defaults[$tag]??'#d9f3f0');return is_string($color)&&preg_match('/^#[0-9a-fA-F]{6}$/',$color)?$color:'#d9f3f0';
+}
+function tagStyle(string $tag): string {
+ $color=tagColor($tag);$r=hexdec(substr($color,1,2));$g=hexdec(substr($color,3,2));$b=hexdec(substr($color,5,2));
+ return ' style="background:'.h($color).';border-color:'.h($color).';color:'.(($r*299+$g*587+$b*114)/1000>150?'#172438':'#ffffff').'"';
+}
+function pitChoiceUsage(string $key,string $value): array {
+ if($key==='tags'){
+  $encoded=json_encode([$value],JSON_THROW_ON_ERROR);
+  return [(int)query("SELECT count(*) FROM pit WHERE data->'tags' @> CAST(? AS jsonb)",[$encoded])->fetchColumn(),(int)query("SELECT count(*) FROM scouting WHERE data->'tags' @> CAST(? AS jsonb)",[$encoded])->fetchColumn()];
+ }
+ return [(int)query('SELECT count(*) FROM pit WHERE data ->> CAST(? AS text) = ?',[$key,$value])->fetchColumn(),(int)query('SELECT count(*) FROM scouting WHERE data ->> CAST(? AS text) = ?',[$key,$value])->fetchColumn()];
+}
 function tagTone(string $tag): int {
  $presets=['Defense'=>0,'Passing'=>1,'L3 Climber'=>2,'Offense'=>3];
  return $presets[$tag]??(4+crc32(strtolower($tag))%4);
@@ -280,18 +300,23 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
   $_SESSION['flash_type']='success';$_SESSION['flash']='Dark Mode '.($enabled?'enabled.':'disabled.');go('admin');
  }
  if($p==='pit_choices'&&role('admin')){
-  $submitted=$_POST['choices']??[];$choices=[];
+  $submitted=$_POST['choices']??[];$choices=[];$old=pitChoices();$colors=pitTagColors();
   if(!is_array($submitted)){http_response_code(400);exit('Invalid pit choices');}
   foreach(pitChoiceFields() as $key=>[$label]){
    $raw=$submitted[$key]??null;
-   if(!is_string($raw)||strlen($raw)>3500){http_response_code(400);exit('Invalid choices for '.$label);}
+   if(!is_array($raw)||count($raw)>30){http_response_code(400);exit('Invalid choices for '.$label);}
    $values=[];$seen=[];
-   foreach(preg_split('/\r\n|\r|\n/',$raw) as $line){$value=trim($line);if($value==='')continue;$lower=strtolower($value);if(strlen($value)>($key==='tags'?40:80)||!preg_match('//u',$value)||preg_match('/[\x00-\x1f\x7f]/',$value)){http_response_code(400);exit('Choice too long or invalid for '.$label); }if(!isset($seen[$lower])){$seen[$lower]=true;$values[]=$value;}}
+   foreach($raw as $i=>$line){if(!is_string($line)){http_response_code(400);exit('Invalid choice');}$value=trim($line);if($value==='')continue;$lower=strtolower($value);if(strlen($value)>($key==='tags'?40:80)||!preg_match('//u',$value)||preg_match('/[\x00-\x1f\x7f]/',$value)){http_response_code(400);exit('Choice too long or invalid for '.$label);}if(isset($seen[$lower])){http_response_code(400);exit('Duplicate choice for '.$label.': '.$value);}$seen[$lower]=true;$values[]=$value;
+    if($key==='tags'){$color=$_POST['tag_colors'][$i]??null;if(!is_string($color)||!preg_match('/^#[0-9a-fA-F]{6}$/',$color)){http_response_code(400);exit('Choose a valid tag color');}$colors[$value]=$color;}
+   }
    if(!$values||count($values)>30){http_response_code(400);exit('Enter 1 to 30 choices for '.$label);}
    $choices[$key]=$values;
   }
+  $removed=[];foreach(pitChoiceFields() as $key=>[$label])foreach(array_diff($old[$key],$choices[$key]) as $value){[$pitCount,$matchCount]=pitChoiceUsage($key,$value);if($pitCount+$matchCount)$removed[]=$label.' “'.$value.'” ('.$pitCount.' pit records, '.$matchCount.' match reports)';}
+  if($removed&&($_POST['acknowledge_removal']??'')!=='1'){http_response_code(409);exit('Confirm removal of choices in use. Existing records will be retained: '.implode('; ',$removed));}
+  $choices['tag_colors']=$colors;
   query('UPDATE site_settings SET pit_choices=? WHERE id=1',[json_encode($choices,JSON_THROW_ON_ERROR)]);
-  $_SESSION['flash_type']='success';$_SESSION['flash']='Pit scouting choices updated.';go('admin#pit-choices');
+  $_SESSION['flash_type']='success';$_SESSION['flash']='Pit Scouting Config updated. Existing scouting records were not changed.';go('admin#pit-choices');
  }
  if($p==='strategy'&&$e&&role('admin','mentor','drive')){
   $id=(string)($_POST['id']??'');$old=$id?query('SELECT * FROM strategy_plans WHERE id=? AND event_id=?',[$id,$e['id']])->fetch(PDO::FETCH_ASSOC):false;
@@ -417,9 +442,16 @@ elseif($p==='admin'){if(!role('admin')){http_response_code(403);exit('Admins onl
 echo '<form method="post" action="/?p=site_title">'.csrf().'<label>Site title<input name="site_title" type="text" maxlength="80" required value="'.h($settings['site_title']).'"></label><button>Save site title</button></form>';
 if($settings['logo_uploaded_at'])echo '<img class="logo-preview" src="/?p=site_logo&v='.rawurlencode($settings['logo_uploaded_at']).'" alt="Current header logo">';
 echo '<form method="post" action="/?p=upload_logo" enctype="multipart/form-data">'.csrf().'<label>Header logo (JPEG, PNG, or WebP, up to 4 MB)<input type="file" name="logo" accept="image/jpeg,image/png,image/webp" required></label><button>Upload logo</button></form>';
-echo '<form method="post" action="/?p=dark_mode" class="theme-form">'.csrf().'<label class="theme-switch"><input type="checkbox" name="dark_mode" value="1"'.(picked($settings['dark_mode'])?' checked':'').' onchange="this.form.requestSubmit()"><span class="theme-slider" aria-hidden="true"></span><span>Dark Mode</span></label><noscript><button>Save theme</button></noscript></form></section>';echo '<section id="pit-choices"><h2>Pit scouting choices</h2><p>Enter one choice per line. Changes apply to new selections; values already saved on a team remain available when editing that team.</p><form method="post" action="/?p=pit_choices">'.csrf();
-foreach(pitChoiceFields() as $key=>[$label])echo '<label>'.h($label).'<textarea name="choices['.h($key).']" rows="5" required>'.h(implode("\n",pitChoices()[$key])).'</textarea></label>';
-echo '<button>Save pit choices</button></form></section>';
+echo '<form method="post" action="/?p=dark_mode" class="theme-form">'.csrf().'<label class="theme-switch"><input type="checkbox" name="dark_mode" value="1"'.(picked($settings['dark_mode'])?' checked':'').' onchange="this.form.requestSubmit()"><span class="theme-slider" aria-hidden="true"></span><span>Dark Mode</span></label><noscript><button>Save theme</button></noscript></form></section>';echo '<section id="pit-choices"><h2>Pit Scouting Config</h2><p>Add or edit dropdown choices below. Removing a choice stops new selections; saved scouting data remains intact. Options in use show a warning before removal.</p><form id="pitChoicesForm" method="post" action="/?p=pit_choices">'.csrf().'<input type="hidden" name="acknowledge_removal" id="pitChoiceAcknowledged" value="0">';
+$configured=pitChoices();foreach(pitChoiceFields() as $key=>[$label]){
+ echo '<fieldset class="config-field" data-key="'.h($key).'"><legend>'.h($label).'</legend><div class="config-options">';
+ foreach($configured[$key] as $value){[$pitCount,$matchCount]=pitChoiceUsage($key,$value);echo '<div class="config-option" data-original="'.h($value).'" data-pit-usage="'.h($pitCount).'" data-match-usage="'.h($matchCount).'"><label><span class="sr-only">'.h($label).' choice</span><input name="choices['.h($key).'][]" value="'.h($value).'" maxlength="'.($key==='tags'?40:80).'" required></label>';
+  if($key==='tags')echo '<label class="config-color"><span>Color</span><input type="color" name="tag_colors[]" value="'.h(tagColor($value)).'" aria-label="Color for '.h($value).'"></label>';
+  echo '<span class="config-usage">'.($pitCount+$matchCount?h($pitCount).' pit · '.h($matchCount).' match':'Unused').'</span><button type="button" class="config-remove" aria-label="Remove '.h($value).'">Remove</button></div>';
+ }
+ echo '</div><button type="button" class="config-add" data-key="'.h($key).'">+ Add '.h($key==='tags'?'tag':'choice').'</button></fieldset>';
+}
+echo '<button>Save Pit Scouting Config</button></form><script src="'.h(asset('pit-config.js')).'" defer></script></section>';
 echo '<h2>Users</h2>';foreach(query('SELECT name,role,position FROM users ORDER BY name')->fetchAll(PDO::FETCH_ASSOC) as $u)echo '<p>'.h($u['name']).' · '.h($u['role']).' '.h($u['position']).'</p>';endpage();}
 elseif($p==='matches'){page('Matches',true,false);if($e){renderMatchSection($e['id'],'qualification');renderMatchSection($e['id'],'elimination');}endpage();}
 elseif($p==='match'){
@@ -445,7 +477,7 @@ elseif($p==='match'){
    $teamNumber=(int)$slot['team_number'];$entries=$byTeam[$teamNumber]??[];$pit=json_decode($slot['pit_data']??'{}',true)?:[];
    echo '<article class="match-team"><div class="match-team-head"><h3><span class="match-position">'.h($name.' '.$i).'</span><a href="/?p=team&n='.h($teamNumber).'">'.h($teamNumber).' · '.h($slot['name']?:'Unnamed team').'</a></h3></div>';
    if($slot['uploaded_at'])echo '<img class="match-team-photo" src="/?p=robot_photo&n='.h($teamNumber).'&v='.rawurlencode($slot['uploaded_at']).'" alt="Robot for team '.h($teamNumber).'" loading="lazy">';
-   if($tags=pitTags($pit)){echo '<div class="team-tags">';foreach($tags as $tag)echo '<span class="team-tag tag-tone-'.h(tagTone($tag)).'">'.h($tag).'</span>';echo '</div>';}
+   if($tags=pitTags($pit)){echo '<div class="team-tags">';foreach($tags as $tag)echo '<span class="team-tag"'.tagStyle($tag).'>'.h($tag).'</span>';echo '</div>';}
    echo '<div class="match-team-metrics">';
    foreach(['match_score'=>'Avg match','auto_score'=>'Avg auto','teleop_score'=>'Avg teleop','defense_rating'=>'Defensive ability','defensive_vulnerability'=>'Defensive vulnerability'] as $key=>$label){$value=metricAverage($entries,$key,in_array($key,['defense_rating','defensive_vulnerability'],true)?5.0:null);echo '<div><span>'.h($label).'</span><strong>'.h($value===null?'—':number_format($value,1)).'</strong></div>';}
    echo '</div>';
@@ -503,9 +535,9 @@ elseif($p==='team'||$p==='pit'){
   foreach(['intake'=>'Intake','shooter_type'=>'Shooter Type'] as $key=>$label){echo '<label>'.h($label).'<select name="'.h($key).'"><option value="">Choose '.h($label).'</option>';foreach(pitChoicesWithSaved($choices,$key,(string)($d[$key]??'')) as $option)echo '<option value="'.h($option).'"'.(($d[$key]??'')===$option?' selected':'').'>'.h($option).'</option>';echo '</select></label>';}
   $tags=pitTags($d);$tagOptions=$choices['tags'];foreach($tags as $tag)if(!in_array($tag,$tagOptions,true))$tagOptions[]=$tag;
   echo '<fieldset class="pit-tags"><legend>Tag Management</legend><div class="pit-tag-picker"><label>Add a tag<select id="pitTagChoice"><option value="">Choose tag</option>';
-  foreach($tagOptions as $tag)echo '<option value="'.h($tag).'" data-tone="'.h(tagTone($tag)).'">'.h($tag).'</option>';
+  foreach($tagOptions as $tag)echo '<option value="'.h($tag).'" data-color="'.h(tagColor($tag)).'">'.h($tag).'</option>';
   echo '</select></label><button type="button" id="pitTagAdd">Add tag</button></div><div id="pitSelectedTags" class="pit-selected-tags">';
-  foreach($tags as $tag)echo '<span class="team-tag tag-tone-'.h(tagTone($tag)).'" data-tag="'.h($tag).'"><input type="hidden" name="tags[]" value="'.h($tag).'"><span>'.h($tag).'</span><button type="button" class="pit-tag-remove" aria-label="Remove '.h($tag).'">×</button></span>';
+  foreach($tags as $tag)echo '<span class="team-tag"'.tagStyle($tag).' data-tag="'.h($tag).'"><input type="hidden" name="tags[]" value="'.h($tag).'"><span>'.h($tag).'</span><button type="button" class="pit-tag-remove" aria-label="Remove '.h($tag).'">×</button></span>';
   echo '</div><small>Select up to 12 tags. Admins manage the choices under Admin.</small><p id="pitTagsStatus" role="status"></p></fieldset><script src="'.h(asset('pit-tags.js')).'" defer></script>';
   echo '<label>Autonomous Notes<textarea name="autonomous">'.field($d,'autonomous').'</textarea></label>';
   foreach(['driver_experience'=>'Driver Experience Level','human_player_experience'=>'Human Player Experience Level'] as $key=>$label){echo '<label>'.h($label).'<select name="'.h($key).'"><option value="">Choose level</option>';foreach(pitChoicesWithSaved($choices,$key,(string)($d[$key]??'')) as $option)echo '<option value="'.h($option).'"'.(($d[$key]??'')===$option?' selected':'').'>'.h($option).'</option>';echo '</select></label>';}
@@ -521,7 +553,7 @@ elseif($p==='team'||$p==='pit'){
   else echo '<p>No autonomous paths have been saved for this team yet.</p>';
   echo '</section><h2>Pit notes</h2><section>';
   if(robotMeta($d)!=='')echo '<p><b>Robot Meta:</b> '.h(robotMeta($d)).'</p>';
-  if($tags=pitTags($d)){echo '<p><b>Tags:</b> <span class="team-tags">';foreach($tags as $tag)echo '<span class="team-tag tag-tone-'.h(tagTone($tag)).'">'.h($tag).'</span>';echo '</span></p>';}
+  if($tags=pitTags($d)){echo '<p><b>Tags:</b> <span class="team-tags">';foreach($tags as $tag)echo '<span class="team-tag"'.tagStyle($tag).'>'.h($tag).'</span>';echo '</span></p>';}
   $pitLabels=['drivetrain'=>'Drivetrain','width'=>'Width','length'=>'Length','height'=>'Height','weight_lbs'=>'Weight','intake'=>'Intake','shooter_type'=>'Shooter type','autonomous'=>'Autonomous Notes','endgame'=>'Endgame','strategy'=>'Preferred strategy','reliability'=>'Reliability','requirements'=>'Special requirements','notes'=>'Notes','driver_experience'=>'Driver Experience Level','human_player_experience'=>'Human Player Experience Level'];
   foreach($pitLabels as $key=>$label)if(($d[$key]??'')!=='')echo '<p><b>'.h($label).':</b> '.h($d[$key]).(in_array($key,['width','length','height'],true)?' in':($key==='weight_lbs'?' lbs':'')).'</p>';
   if(!$d)echo '<p>No pit record yet.</p>';echo '</section><h2>Match reports</h2>';
