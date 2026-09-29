@@ -387,9 +387,9 @@ elseif($p==='strategy'){
     foreach($choices as $choice)echo '<option value="'.h($choice['number']).'"'.((int)$partner['number']===(int)$choice['number']?' selected':'').'>'.h($choice['number'].' · '.$choice['name']).'</option>';
     echo '</select></label><label>Path color<input type="color" name="color_'.h($i).'" data-color="'.h($i).'" value="'.h($partner['color']).'"></label></div>';
    }
-   echo '</div><h2>Planned paths</h2><p>Choose the partner to draw, then draw on the field. Undo and Clear affect the selected partner.</p><div class="drawing-stage"><div class="drawing-stage-bar"><strong>Strategy field</strong><button type="button" class="canvas-fullscreen" aria-pressed="false">Full screen</button></div><div class="strategy-tools">';
+   echo '</div><h2>Planned paths</h2><p>Choose the partner to draw, then draw on the field. Undo and Clear affect the selected partner.</p><div class="drawing-stage"><div class="strategy-tools">';
    for($i=0;$i<3;$i++)echo '<button type="button" class="strategy-layer" data-layer="'.h($i).'">Partner '.h($i+1).'</button>';
-   echo '<button type="button" id="strategyUndo">Undo stroke</button><button type="button" id="strategyClear">Clear partner path</button></div>';
+   echo '<button type="button" id="strategyUndo">Undo stroke</button><button type="button" id="strategyClear">Clear partner path</button><button type="button" class="canvas-fullscreen" aria-pressed="false">Full screen</button></div>';
    echo '<canvas id="strategyCanvas" width="800" height="480" data-plan="'.h(json_encode(['teams'=>$partners,'paths'=>$paths])).'" aria-label="Strategy field drawing"></canvas></div><input type="hidden" name="strategy_paths" id="strategyPaths" value="'.h(json_encode($paths)).'"><label>Plan notes<textarea name="notes" rows="7">'.h($plan['notes']??'').'</textarea></label><button>Save strategy plan</button></form>';
   }elseif($plan){
    echo '<h2>'.h($plan['title']).'</h2><div class="drawing-stage"><div class="drawing-stage-bar"><strong>Strategy field</strong><button type="button" class="canvas-fullscreen" aria-pressed="false">Full screen</button></div><canvas id="strategyCanvas" width="800" height="480" data-plan="'.h(json_encode(['teams'=>$partners,'paths'=>$paths])).'" aria-label="Strategy field drawing"></canvas></div><div class="path-legend">';
