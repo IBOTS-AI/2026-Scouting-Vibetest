@@ -65,13 +65,35 @@
   buttons.forEach((button, i) => button.addEventListener('click', () => { active = i; render(); }));
   colors.forEach(input => input.addEventListener('input', render));
   teams.forEach(input => input.addEventListener('change', render));
+  document.getElementById('strategyLoadMatch')?.addEventListener('click', () => {
+    const match = document.getElementById('strategyMatch');
+    const alliance = document.getElementById('strategyAlliance');
+    const status = document.getElementById('strategyMatchStatus');
+    if (!match.value) { status.textContent = 'Choose a match first.'; return; }
+    const option = match.selectedOptions[0];
+    let slots;
+    try { slots = JSON.parse(option.dataset.teams); } catch { status.textContent = 'Match teams are unavailable.'; return; }
+    const numbers = teams.map((_, i) => String(slots[`${alliance.value}${i + 1}`] || 0));
+    if (numbers.some(number => number === '0') || numbers.some((number, i) => ![...teams[i].options].some(option => option.value === number))) {
+      status.textContent = 'This alliance has an incomplete schedule. Refresh Official Data in Admin or choose teams manually.';
+      return;
+    }
+    const changed = numbers.some((number, i) => teams[i].value !== number);
+    if (changed && paths.some(layer => layer.length) && !window.confirm('Loading different teams will clear the drawn paths. Continue?')) return;
+    if (changed) { stroke = null; paths.forEach(layer => { layer.length = 0; }); }
+    teams.forEach((team, i) => { team.value = numbers[i]; });
+    const name = alliance.value === 'R' ? 'Red' : 'Blue';
+    document.getElementById('strategyTitle').value = `${option.textContent} ${name} alliance`;
+    status.textContent = `Loaded ${option.textContent} ${name} alliance. You can change any partner below.`;
+    render();
+  });
   if (input) {
     const point = event => {
       const box = canvas.getBoundingClientRect();
       return [Number(Math.max(0, Math.min(1, (event.clientX - box.left) / box.width)).toFixed(4)), Number(Math.max(0, Math.min(1, (event.clientY - box.top) / box.height)).toFixed(4))];
     };
     canvas.addEventListener('pointerdown', event => {
-      if (!teams[active]?.value || paths[active].length >= 30) return;
+      if (!teams[active]?.value || teams[active].value === '0' || paths[active].length >= 30) return;
       event.preventDefault();stroke = [point(event)];paths[active].push(stroke);
       canvas.setPointerCapture(event.pointerId);render();
     });
