@@ -536,7 +536,7 @@ elseif($p==='strategy'){
   $id=(string)($_GET['id']??'');$plan=$id?query('SELECT * FROM strategy_plans WHERE id=? AND event_id=?',[$id,$e['id']])->fetch(PDO::FETCH_ASSOC):false;
   if($id&&!$plan){http_response_code(404);exit('Strategy plan not found');}
   $editor=role('admin','mentor','drive');$choices=query('SELECT number,name FROM teams WHERE event_id=? ORDER BY number',[$e['id']])->fetchAll(PDO::FETCH_ASSOC);
-  $partners=$plan?json_decode($plan['teams'],true):[['number'=>0,'color'=>'#cf1836'],['number'=>0,'color'=>'#0069b4'],['number'=>0,'color'=>'#008b69']];
+  $partners=$plan?json_decode($plan['teams'],true):[['number'=>0,'color'=>'#16a34a'],['number'=>0,'color'=>'#f97316'],['number'=>0,'color'=>'#9333ea']];
   $paths=$plan?json_decode($plan['paths'],true):[[],[],[]];
   echo '<div class="strategy-layout"><div>';
   if($editor){
