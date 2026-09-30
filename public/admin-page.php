@@ -22,14 +22,13 @@ if($type==='district'){
 }else echo '<input type="hidden" name="district" value="'.h($district).'">';
 echo '</form><p>'.count($filtered).' events shown. <a href="/?p=admin&year='.h($year).'&type='.h($type).'&district='.h($district).'&refresh=1#event-selection">Refresh FIRST event list</a></p><form method="post" action="/?p=event">'.csrf().'<input type="hidden" name="year" value="'.h($year).'"><label>Event<select name="event_code" required><option value="">Choose an event</option>';
 foreach($filtered as $item)echo '<option value="'.h($item['code']).'">'.h($item['name']).' — '.h($item['location']).'</option>';
-echo '</select></label><button'.(!$filtered?' disabled':'').'>Select event</button></form></div><div><h3>Selected Event Controls</h3>';
+echo '</select></label><button'.(!$filtered?' disabled':'').'>Select event</button></form></div><div>';
 if($e){
  $tc=query('SELECT count(*) FROM teams WHERE event_id=?',[$e['id']])->fetchColumn();
  $mc=query("SELECT count(*) FROM matches WHERE event_id=? AND stage='qualification'",[$e['id']])->fetchColumn();
  $pc=query("SELECT count(*) FROM matches WHERE event_id=? AND stage='elimination'",[$e['id']])->fetchColumn();
  echo '<p class="event-confirmation">Selected event: <strong>'.h($e['name']).'</strong></p><p>'.h($tc).' teams · '.h($mc).' qualification matches · '.h($pc).' elimination matches</p>';
  if(preg_match('/^(\d{4})([a-z0-9]+)$/',$e['event_key']??''))echo '<form method="post" action="/?p=refresh_event">'.csrf().'<button>Refresh Official Data</button></form>';
- echo '<details class="admin-rollup"><summary>Import schedule from CSV</summary><p>Columns: match,r1,r2,r3,b1,b2,b3. Existing submitted slots are protected.</p><form method="post" action="/?p=import" enctype="multipart/form-data">'.csrf().'<input type="file" name="csv" accept=".csv" required><button>Import CSV</button></form></details>';
 }else echo '<p>No event selected yet.</p>';
 echo '</div></div></section>';
 
@@ -37,8 +36,10 @@ echo '<section class="admin-section" id="user-management"><h2>User Management</h
 foreach(['scout','pit','drive','mentor','admin'] as $role)echo '<option>'.h($role).'</option>';
 echo '</select></label><label>Position<select name="position"><option value="">None</option>';
 foreach(['R1','R2','R3','B1','B2','B3'] as $position)echo '<option>'.h($position).'</option>';
-echo '</select></label></div><button>Create account</button></form></div><div><h3>Existing users</h3><div class="scroll"><table class="admin-users"><thead><tr><th>Username</th><th>Role</th><th>Position</th></tr></thead><tbody>';
-foreach(query('SELECT name,role,position FROM users ORDER BY name')->fetchAll(PDO::FETCH_ASSOC) as $user)echo '<tr><td>'.h($user['name']).'</td><td>'.h($user['role']).'</td><td>'.h($user['position']?:'—').'</td></tr>';
+echo '</select></label></div><button>Create account</button></form></div><div><h3>Existing users</h3><div class="scroll"><table class="admin-users"><thead><tr><th>Username</th><th>Role</th><th>Position</th><th>Password</th></tr></thead><tbody>';
+foreach(query('SELECT id,name,role,position FROM users ORDER BY name')->fetchAll(PDO::FETCH_ASSOC) as $user){
+ echo '<tr><td>'.h($user['name']).'</td><td>'.h($user['role']).'</td><td>'.h($user['position']?:'—').'</td><td><details class="password-reset"><summary aria-label="Reset password for '.h($user['name']).'">Reset password</summary><form method="post" action="/?p=reset_password">'.csrf().'<input type="hidden" name="user_id" value="'.h($user['id']).'"><label>New password<input type="password" name="new_password" minlength="10" maxlength="72" required autocomplete="new-password"></label><small>At least 10 characters.</small><button type="submit">Reset password</button></form></details></td></tr>';
+}
 echo '</tbody></table></div></div></div></section>';
 
 echo '<section class="admin-section" id="appearance"><h2>Site Appearance</h2><div class="admin-columns"><div><h3>Logo Selection</h3>';
