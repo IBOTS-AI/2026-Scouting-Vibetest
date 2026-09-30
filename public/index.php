@@ -540,13 +540,7 @@ elseif($p==='strategy'){
   $paths=$plan?json_decode($plan['paths'],true):[[],[],[]];
   echo '<div class="strategy-layout"><div>';
   if($editor){
-   echo '<form method="post" action="/?p=strategy" class="strategy-form">'.csrf().'<input type="hidden" name="id" value="'.h($plan['id']??'').'"><label>Plan title<input name="title" maxlength="120" value="'.h($plan['title']??''). '" placeholder="Example: Qualification 12 red alliance" required></label><div class="strategy-partners">';
-   foreach($partners as $i=>$partner){
-    echo '<div><label>Alliance partner '.h($i+1).'<select name="team_'.h($i).'" data-partner="'.h($i).'"><option value="0">Choose team</option>';
-    foreach($choices as $choice)echo '<option value="'.h($choice['number']).'"'.((int)$partner['number']===(int)$choice['number']?' selected':'').'>'.h($choice['number'].' · '.$choice['name']).'</option>';
-    echo '</select></label><label>Path color<input type="color" name="color_'.h($i).'" data-color="'.h($i).'" value="'.h($partner['color']).'"></label></div>';
-   }
-   echo '</div><h2>Planned paths</h2><div class="drawing-stage"><div class="strategy-tools">';
+   echo '<form id="strategyForm" method="post" action="/?p=strategy" class="strategy-form">'.csrf().'<input type="hidden" name="id" value="'.h($plan['id']??'').'"><h2>Planned paths</h2><div class="drawing-stage"><div class="strategy-tools">';
    for($i=0;$i<3;$i++)echo '<button type="button" class="strategy-layer" data-layer="'.h($i).'">Partner '.h($i+1).'</button>';
    echo '<button type="button" id="strategyUndo">Undo stroke</button><span class="strategy-action-pair"><button type="button" id="strategyClear">Clear partner path</button><button type="button" class="canvas-fullscreen" aria-pressed="false">Full screen</button></span></div>';
    echo '<canvas id="strategyCanvas" width="800" height="480" data-plan="'.h(json_encode(['teams'=>$partners,'paths'=>$paths])).'" aria-label="Strategy field drawing"></canvas></div><input type="hidden" name="strategy_paths" id="strategyPaths" value="'.h(json_encode($paths)).'"><label>Plan notes<textarea name="notes" rows="7">'.h($plan['notes']??'').'</textarea></label><button>Save strategy plan</button></form>';
@@ -555,7 +549,21 @@ elseif($p==='strategy'){
    foreach($partners as $partner)if($partner['number'])echo '<span><i style="background:'.h($partner['color']).'"></i>Team '.h($partner['number']).'</span>';
    echo '</div><p>'.nl2br(h($plan['notes'])).'</p>';
   }else echo '<p>Choose a saved plan to view it.</p>';
-  echo '</div><aside class="strategy-list"><div class="strategy-list-header"><h2>Saved plans</h2>';
+  echo '</div><div class="strategy-sidebar">';
+  if($editor){
+   $matchChoices=query("SELECT id,stage,match_number,label FROM matches WHERE event_id=? ORDER BY CASE WHEN stage='qualification' THEN 0 ELSE 1 END,match_number",[$e['id']])->fetchAll(PDO::FETCH_ASSOC);
+   $matchTeams=[];foreach(query('SELECT s.match_id,s.position,s.team_number FROM slots s JOIN matches m ON m.id=s.match_id WHERE m.event_id=?',[$e['id']]) as $slot)$matchTeams[$slot['match_id']][$slot['position']]=(int)$slot['team_number'];
+   echo '<section class="strategy-setup"><h2>Plan setup</h2><label>Plan title<input form="strategyForm" id="strategyTitle" name="title" maxlength="120" value="'.h($plan['title']??'').'" placeholder="Example: Q12 red alliance" required></label><div class="strategy-match-controls"><label>Match<select id="strategyMatch"><option value="">Choose match</option>';
+   foreach($matchChoices as $match)echo '<option value="'.h($match['id']).'" data-teams="'.h(json_encode($matchTeams[$match['id']]??new stdClass())).'">'.h(matchLabel($match)).'</option>';
+   echo '</select></label><label>Alliance<select id="strategyAlliance"><option value="R">Red</option><option value="B">Blue</option></select></label></div><button type="button" id="strategyLoadMatch">Load match teams</button><p id="strategyMatchStatus" role="status"></p><div class="strategy-partners">';
+   foreach($partners as $i=>$partner){
+    echo '<div><label>Alliance partner '.h($i+1).'<select form="strategyForm" name="team_'.h($i).'" data-partner="'.h($i).'"><option value="0">Choose team</option>';
+    foreach($choices as $choice)echo '<option value="'.h($choice['number']).'"'.((int)$partner['number']===(int)$choice['number']?' selected':'').'>'.h($choice['number'].' · '.$choice['name']).'</option>';
+    echo '</select></label><label>Path color<input form="strategyForm" type="color" name="color_'.h($i).'" data-color="'.h($i).'" value="'.h($partner['color']).'"></label></div>';
+   }
+   echo '</div></section>';
+  }
+  echo '<aside class="strategy-list"><div class="strategy-list-header"><h2>Saved plans</h2>';
   if($editor)echo '<a class="button strategy-new" href="/?p=strategy">New plan</a>';
   echo '</div>';
   foreach($plans as $item){
@@ -564,7 +572,7 @@ elseif($p==='strategy'){
    echo '</div>';
   }
   if(!$plans)echo '<p>No plans saved yet.</p>';
-  echo '</aside></div><script src="'.h(asset('strategy.js')).'" defer></script>';endpage();
+  echo '</aside></div></div><script src="'.h(asset('strategy.js')).'" defer></script>';endpage();
  }
 }
 elseif($p==='picks'){
