@@ -555,7 +555,7 @@ elseif($p==='strategy'){
    $matchTeams=[];foreach(query('SELECT s.match_id,s.position,s.team_number FROM slots s JOIN matches m ON m.id=s.match_id WHERE m.event_id=?',[$e['id']]) as $slot)$matchTeams[$slot['match_id']][$slot['position']]=(int)$slot['team_number'];
    echo '<section class="strategy-setup"><h2>Plan setup</h2><label>Plan title<input form="strategyForm" id="strategyTitle" name="title" maxlength="120" value="'.h($plan['title']??'').'" placeholder="Example: Q12 red alliance" required></label><div class="strategy-match-controls"><label>Match<select id="strategyMatch"><option value="">Choose match</option>';
    foreach($matchChoices as $match)echo '<option value="'.h($match['id']).'" data-teams="'.h(json_encode($matchTeams[$match['id']]??new stdClass())).'">'.h(matchLabel($match)).'</option>';
-   echo '</select></label><label>Alliance<select id="strategyAlliance"><option value="R">Red</option><option value="B">Blue</option></select></label></div><button type="button" id="strategyLoadMatch">Load match teams</button><p id="strategyMatchStatus" role="status"></p><div class="strategy-partners">';
+   echo '</select></label><label>Alliance<select id="strategyAlliance"><option value="R">Red</option><option value="B">Blue</option></select></label></div><div class="strategy-setup-actions"><button type="button" id="strategyLoadMatch">Load match teams</button><a class="button strategy-new" href="/?p=strategy">New plan</a></div><p id="strategyMatchStatus" role="status"></p><div class="strategy-partners">';
    foreach($partners as $i=>$partner){
     echo '<div><label>Alliance partner '.h($i+1).'<select form="strategyForm" name="team_'.h($i).'" data-partner="'.h($i).'"><option value="0">Choose team</option>';
     foreach($choices as $choice)echo '<option value="'.h($choice['number']).'"'.((int)$partner['number']===(int)$choice['number']?' selected':'').'>'.h($choice['number'].' · '.$choice['name']).'</option>';
@@ -564,7 +564,6 @@ elseif($p==='strategy'){
    echo '</div></section>';
   }
   echo '<aside class="strategy-list"><div class="strategy-list-header"><h2>Saved plans</h2>';
-  if($editor)echo '<a class="button strategy-new" href="/?p=strategy">New plan</a>';
   echo '</div>';
   foreach($plans as $item){
    echo '<div class="strategy-plan-row'.($plan&&$plan['id']===$item['id']?' current':'').'"><div class="strategy-plan-name"><strong>'.h($item['title']).'</strong><small>'.h($item['updated_at']).'</small></div><a class="button strategy-load" href="/?p=strategy&id='.h($item['id']).'" aria-label="Load plan '.h($item['title']).'">Load</a>';
