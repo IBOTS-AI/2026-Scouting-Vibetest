@@ -304,7 +304,8 @@ function renderMatchSection(string $eventId,string $stage): void {
  echo '<div class="scroll"><table class="match-table"><colgroup><col class="match-number-col"><col class="match-video-col"><col span="6"></colgroup><thead><tr><th>Match</th><th>Video</th>';
  foreach(['R1','R2','R3','B1','B2','B3'] as $pos)echo '<th class="'.($pos[0]==='R'?'red':'blue').'-head">'.h($pos).'</th>';
  echo '</tr></thead><tbody>';
- foreach($rows as $m){
+ foreach($rows as $rowIndex=>$m){
+  if($rowIndex>0)echo '<tr class="match-row-spacer" aria-hidden="true"><td colspan="8"></td></tr>';
   $number=(int)$m['match_number'];$label=matchLabel($m);
   echo '<tr><th scope="row"><a class="match-number-link" href="/?p=match&stage='.h($stage).'&n='.$number.'" aria-label="View '.h($title).' '.h($label).'">'.h($label).'</a></th><td class="match-video-cell">';
   if($m['video_url'])echo '<a class="video-link" href="'.h($m['video_url']).'" target="_blank" rel="noopener noreferrer" aria-label="Watch '.h($label).' video" title="Watch match video"><svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 5.5v13l10-6.5z"/></svg></a>';
