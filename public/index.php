@@ -334,7 +334,7 @@ function renderMatchSection(string $eventId,string $stage): void {
  if(!$rows){echo '<p class="empty-matches">No '.h(strtolower($title)).' have been loaded yet. Refresh official data when FIRST publishes them.</p></details>';return;}
  if($stage==='elimination')renderPlayoffBracket($rows);
  echo '<div class="scroll"><table class="match-table"><colgroup><col class="match-number-col"><col class="match-video-col"><col span="3"><col class="alliance-score-col" span="2"><col span="3"></colgroup><thead><tr><th>Match</th><th>Video</th>';
- foreach(['R1','R2','R3','B1','B2','B3'] as $pos){echo '<th class="'.($pos[0]==='R'?'red':'blue').'-head">'.h($pos).'</th>';if($pos==='R3')echo '<th class="red-head alliance-score-heading">Red Score</th><th class="blue-head alliance-score-heading">Blue Score</th>';}
+ foreach(['R1','R2','R3','B1','B2','B3'] as $pos){echo '<th class="'.($pos[0]==='R'?'red':'blue').'-head">'.h($pos).'</th>';if($pos==='R3')echo '<th class="red-head alliance-score-heading">Red</th><th class="blue-head alliance-score-heading">Blue</th>';}
  echo '</tr></thead><tbody>';
  foreach($rows as $rowIndex=>$m){
   if($rowIndex>0)echo '<tr class="match-row-spacer" aria-hidden="true"><td colspan="10"></td></tr>';
