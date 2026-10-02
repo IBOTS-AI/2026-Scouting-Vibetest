@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS teams (event_id uuid REFERENCES events(id), number in
 CREATE TABLE IF NOT EXISTS matches (id uuid PRIMARY KEY, event_id uuid REFERENCES events(id), match_number integer NOT NULL, video_url text, stage text NOT NULL DEFAULT 'qualification', label text);
 ALTER TABLE matches ADD COLUMN IF NOT EXISTS stage text NOT NULL DEFAULT 'qualification';
 ALTER TABLE matches ADD COLUMN IF NOT EXISTS label text;
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS official_result jsonb NOT NULL DEFAULT '{}';
 ALTER TABLE matches DROP CONSTRAINT IF EXISTS matches_event_id_match_number_key;
 CREATE UNIQUE INDEX IF NOT EXISTS matches_event_stage_number_idx ON matches(event_id,stage,match_number);
 CREATE TABLE IF NOT EXISTS slots (id uuid PRIMARY KEY, match_id uuid REFERENCES matches(id), position text NOT NULL CHECK(position IN ('R1','R2','R3','B1','B2','B3')), team_number integer NOT NULL, assigned_user uuid REFERENCES users(id), status text NOT NULL DEFAULT 'unassigned', UNIQUE(match_id,position));
