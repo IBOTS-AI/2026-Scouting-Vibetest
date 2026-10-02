@@ -104,3 +104,5 @@ header{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align
 .team-grid .team-card-body h2{text-align:center}.team-grid .team-card-body .pit-scout-button{align-self:center;display:flex;align-items:center;justify-content:center;width:9rem;max-width:100%;text-align:center}
 
 .team-grid{column-gap:1.75rem;row-gap:1.75rem}
+
+.team-grid .team-card-body{background:#e2ebf4;border-top:1px solid #bdccdc}.dark-mode .team-grid .team-card-body{background:#30465d;border-top-color:#617a94}
