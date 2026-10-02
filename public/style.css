@@ -106,3 +106,5 @@ header{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align
 .team-grid{column-gap:1.75rem;row-gap:1.75rem}
 
 .team-grid .team-card-body{background:#e2ebf4;border-top:1px solid #bdccdc}.dark-mode .team-grid .team-card-body{background:#30465d;border-top-color:#617a94}
+
+.team-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.team-grid .team-card-body,.dark-mode .team-grid .team-card-body{background:#e8edf3;border-top-color:#b8c6d5;color:#223349}.team-grid .team-card-body h2 a,.dark-mode .team-grid .team-card-body h2 a{color:#223349}@media(max-width:850px){.team-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:650px){.team-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:400px){.team-grid{grid-template-columns:1fr}}
