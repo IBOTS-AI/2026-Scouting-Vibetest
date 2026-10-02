@@ -313,7 +313,7 @@ function renderMatchSection(string $eventId,string $stage): void {
   foreach(['R1','R2','R3','B1','B2','B3'] as $pos){
    $alliance=$pos[0]==='R'?'red':'blue';$slot=query('SELECT s.*,sc.status AS scouting_status FROM slots s LEFT JOIN scouting sc ON sc.slot_id=s.id WHERE s.match_id=? AND s.position=?',[$m['id'],$pos])->fetch(PDO::FETCH_ASSOC);
    echo '<td class="'.$alliance.'-cell">';
-   if($slot)echo '<div class="slot-line"><a class="team-performance-link" href="/?p=team&n='.h($slot['team_number']).'" aria-label="View performance for team '.h($slot['team_number']).'">'.teamNumber($slot['team_number']).'</a><a class="scout-button '.($slot['scouting_status']==='submitted'?'scouted':'unscouted').'" href="/?p=scout&id='.h($slot['id']).'">Scout</a><span class="scouting-status">'.($slot['scouting_status']==='submitted'?'Scouted 1 time':'Not Scouted Yet').'</span></div>';
+   if($slot)echo '<div class="slot-line"><a class="team-performance-link" href="/?p=team&n='.h($slot['team_number']).'" aria-label="View performance for team '.h($slot['team_number']).'">'.teamNumber($slot['team_number']).'</a><a class="scout-button '.($slot['scouting_status']==='submitted'?'scouted':'unscouted').'" href="/?p=scout&id='.h($slot['id']).'">'.($slot['scouting_status']==='submitted'?'Re-Scout':'Scout').'</a><span class="scouting-status">'.($slot['scouting_status']==='submitted'?'Scouted 1 time':'Not Scouted Yet').'</span></div>';
    else echo '—';
    echo '</td>';
   }
