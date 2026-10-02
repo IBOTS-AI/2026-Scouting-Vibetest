@@ -123,10 +123,23 @@ function renderPlayoffBracket(array $rows): void {
   $sources=[5=>'Loser M1 · Loser M2',6=>'Loser M3 · Loser M4',7=>'Winner M1 · Winner M2',8=>'Winner M3 · Winner M4',9=>'Loser M7 · Winner M6',10=>'Loser M8 · Winner M5',11=>'Winner M7 · Winner M8',12=>'Winner M10 · Winner M9',13=>'Loser M11 · Winner M12'];break;
  }
  foreach($rows as $row){$data=json_decode($row['official_result']??'{}',true)?:[];$round=$data['round']??(preg_match('/\(R(\d+)\)/',$row['label']??'',$m)?(int)$m[1]:null);$group=$round?'Round '.$round:(stripos($row['label']??'','Final')!==false?'Finals':'Playoffs');$rounds[$group][]=$row;}
- echo '<div class="playoff-legend"><span class="winner-route">Solid green arrow: winner advances</span><span class="loser-route">Dashed orange arrow: loser advances</span></div><div class="playoff-bracket" aria-label="Playoff bracket"><div class="playoff-board"><svg class="playoff-connectors" aria-hidden="true" focusable="false"></svg>';
- foreach($rounds as $round=>$matches){echo '<div class="playoff-round"><h3>'.h($round).'</h3>';
+ $positions=[];$height=max(500,max(array_map('count',$rounds))*220+44);$width=count($rounds)*205+max(0,count($rounds)-1)*72;$column=0;
+ foreach($rounds as $matches){foreach($matches as $i=>$match){$positions[(int)$match['match_number']]=['x'=>$column*277,'y'=>44+($height-44)/count($matches)*($i+.5)-95];}$column++;}
+ $edges=[];
+ foreach($rounds as $matches)foreach($matches as $match){
+  $data=json_decode($match['official_result']??'{}',true)?:[];$label=matchLabel($match);$source=$data['source']??'';if(!$source&&$sources)$source=$sources[(int)$match['match_number']]??(stripos($label,'Final')!==false?'Winner M11 · Winner M13':'');
+  if(preg_match_all('/(Winner|Loser) M(\d+)/',$source,$links,PREG_SET_ORDER))foreach($links as $port=>$link){$from=$positions[(int)$link[2]]??null;$to=$positions[(int)$match['match_number']];if(!$from||$to['x']<=$from['x'])continue;
+   $sx=$from['x']+205;$sy=$from['y']+95;$tx=$to['x'];$ty=$to['y']+($port===0?66:133);$kind=strtolower($link[1]);
+   if($tx-$sx<100){$mid=$sx+($tx-$sx)*($port===0?.4:.6);$path="M$sx $sy H$mid V$ty H".($tx-3);}else{$lane=5+(count($edges)%4)*7;$path="M$sx $sy H".($sx+18)." V$lane H".($tx-18)." V$ty H".($tx-3);}
+   $edges[]=['kind'=>$kind,'path'=>$path,'title'=>$link[1].' of match '.$link[2].' advances to '.$label];
+  }
+ }
+ echo '<div class="playoff-legend"><span class="winner-route">Solid green arrow: winner advances</span><span class="loser-route">Dashed orange arrow: loser advances</span></div><div class="playoff-bracket" aria-label="Playoff bracket"><div class="playoff-board" style="width:'.h($width).'px;height:'.h($height).'px"><svg class="playoff-connectors" width="'.h($width).'" height="'.h($height).'" viewBox="0 0 '.h($width).' '.h($height).'" aria-hidden="true" focusable="false"><defs><marker id="playoff-winner" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 Z" class="winner-arrow" fill="#23864a"/></marker><marker id="playoff-loser" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 Z" class="loser-arrow" fill="#c76a17"/></marker></defs>';
+ foreach($edges as $edge)echo '<path class="'.h($edge['kind']).'-edge" d="'.h($edge['path']).'" fill="none" stroke="'.($edge['kind']==='winner'?'#23864a':'#c76a17').'" stroke-width="3"'.($edge['kind']==='loser'?' stroke-dasharray="6 4"':'').' marker-end="url(#playoff-'.h($edge['kind']).')"><title>'.h($edge['title']).'</title></path>';
+ echo '</svg>';$column=0;
+ foreach($rounds as $round=>$matches){echo '<div class="playoff-round" style="left:'.h($column++*277).'px"><h3>'.h($round).'</h3>';
   foreach($matches as $match){$data=json_decode($match['official_result']??'{}',true)?:[];$label=matchLabel($match);if(empty($data['source'])&&$sources)$data['source']=$sources[(int)$match['match_number']]??(stripos($label,'Final')!==false?'Winner M11 · Winner M13':'');$red=$data['red_score']??null;$blue=$data['blue_score']??null;
-   echo '<article class="playoff-card" data-match="'.h($match['match_number']).'" data-source="'.h($data['source']??'').'"><div class="playoff-card-header"><a href="/?p=match&stage=elimination&n='.h($match['match_number']).'">'.h($label).'</a>';
+   echo '<article class="playoff-card" style="top:'.h($positions[(int)$match['match_number']]['y']).'px" data-match="'.h($match['match_number']).'" data-source="'.h($data['source']??'').'"><div class="playoff-card-header"><a href="/?p=match&stage=elimination&n='.h($match['match_number']).'">'.h($label).'</a>';
    if($match['video_url'])echo '<a class="video-link" href="'.h($match['video_url']).'" target="_blank" rel="noopener noreferrer" aria-label="Watch '.h($label).' video" title="Watch match video"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 5.5v13l10-6.5z"/></svg></a>';
    echo '</div>';
    $six=$data['teams']??[];
