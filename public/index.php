@@ -71,13 +71,7 @@ function officialData(int $year,string $code): array {
  $teams=[];$matches=[];$videos=[];$playoffs=[];
  if($eventHtml && preg_match_all('~<div class="col-3 col-md-1 fw-bold">\s*(\d+)\s*</div>\s*<div class="col-6">\s*([^<]+)\s*</div>~si',$eventHtml,$found,PREG_SET_ORDER))foreach($found as $m)$teams[(int)$m[1]]=html_entity_decode(trim($m[2]),ENT_QUOTES|ENT_HTML5,'UTF-8');
  if($qualHtml && preg_match_all('~<tr\b[^>]*\bid="match(\d+)a"[^>]*>(.*?)</tr>~si',$qualHtml,$rows,PREG_SET_ORDER))foreach($rows as $row){preg_match_all('~href="/'.$year.'/team/(\d+)"~si',$row[2],$numbers);$six=array_slice(array_map('intval',$numbers[1]),0,6);if(count($six)===6&&min($six)>0){$number=(int)$row[1];$matches[$number]=$six;$videos[$number]=preg_match('~\btitle=["\']Match Video Available["\']~i',$row[2])?$base.'/qualifications/'.$number:null;}}
- if($playoffHtml && preg_match_all('~<tr\b[^>]*\bid="match(\d+)a"[^>]*>(.*?)</tr>\s*<tr\b[^>]*>(.*?)</tr>~si',$playoffHtml,$rows,PREG_SET_ORDER))foreach($rows as $row){
-  preg_match_all('~href="/'.$year.'/team/(\d+)"~si',$row[3],$numbers);$six=array_slice(array_map('intval',$numbers[1]),0,6);
-  if(count($six)!==6||min($six)<=0)continue;
-  $number=(int)$row[1];if(!preg_match('~<a\b[^>]*href="/'.$year.'/'.preg_quote($code,'~').'/playoffs/'.$number.'"[^>]*>(.*?)</a>~si',$row[2],$link))continue;
-  $label=trim(preg_replace('/\s+/u',' ',str_replace("\xc2\xa0",' ',html_entity_decode(strip_tags($link[1]),ENT_QUOTES|ENT_HTML5,'UTF-8'))));
-  $playoffs[$number]=['teams'=>$six,'label'=>$label?:'Match '.$number,'video_url'=>preg_match('~\btitle=["\']Match Video Available["\']~i',$row[2])?$base.'/playoffs/'.$number:null];
- }
+ $playoffs=$playoffHtml?parsePlayoffs($playoffHtml,$year,$code):[];
  return [$teams,$matches,(bool)$eventHtml,(bool)$qualHtml,$videos,$playoffs,(bool)$playoffHtml];
 }
 function saveOfficialData(string $eventId,array $teams,array $matches,?array $videos=null,string $stage='qualification',array $labels=[]): int {
@@ -96,10 +90,52 @@ function saveOfficialData(string $eventId,array $teams,array $matches,?array $vi
  }
  return $protected;
 }
+function parsePlayoffs(string $html,int $year,string $code): array {
+ $base="https://frc-events.firstinspires.org/$year/".rawurlencode($code);$result=[];
+ if(!preg_match_all('~<tr\b[^>]*\bid="match(\d+)a"[^>]*>(.*?)</tr>\s*<tr\b[^>]*>(.*?)</tr>~si',$html,$rows,PREG_SET_ORDER))return [];
+ foreach($rows as $row){
+  $number=(int)$row[1];
+  if(!preg_match('~<a\b[^>]*href="/'.$year.'/'.preg_quote($code,'~').'/playoffs/'.$number.'"[^>]*>(.*?)</a>~si',$row[2],$link))continue;
+  $label=trim(preg_replace('/\s+/u',' ',str_replace("\xc2\xa0",' ',html_entity_decode(strip_tags($link[1]),ENT_QUOTES|ENT_HTML5,'UTF-8'))));
+  preg_match_all('~href="/'.$year.'/team/(\d+)"~si',$row[3],$numbers);$six=array_slice(array_map('intval',$numbers[1]),0,6);
+  $alliances=[];$scores=[];
+  preg_match_all('~<td\b[^>]*>(.*?)</td>~si',$row[2],$cells);
+  foreach($cells[1] as $cell){if(preg_match('/Alliance\s+(\d+)/i',strip_tags($cell),$m))$alliances[]=(int)$m[1];if(preg_match('~<h3\b[^>]*>\s*(\d+)\s*</h3>~si',$cell,$m))$scores[]=(int)$m[1];}
+  $round=preg_match('/\(R(\d+)\)/',$label,$m)?(int)$m[1]:null;
+  $result[$number]=['teams'=>count($six)===6&&min($six)>0?$six:[],'label'=>$label?:'Match '.$number,'round'=>$round,'red_alliance'=>$alliances[0]??null,'blue_alliance'=>$alliances[1]??null,'red_score'=>$scores[0]??null,'blue_score'=>$scores[1]??null,'video_url'=>preg_match('~\btitle=["\']Match Video Available["\']~i',$row[2])?$base.'/playoffs/'.$number:null];
+ }
+ if(($result[1]['red_alliance']??null)===1&&($result[1]['blue_alliance']??null)===8){
+  $sources=[5=>'Loser M1 · Loser M2',6=>'Loser M3 · Loser M4',7=>'Winner M1 · Winner M2',8=>'Winner M3 · Winner M4',9=>'Loser M7 · Winner M6',10=>'Loser M8 · Winner M5',11=>'Winner M7 · Winner M8',12=>'Winner M10 · Winner M9',13=>'Loser M11 · Winner M12'];
+  foreach($result as $number=>&$match){$match['source']=$sources[$number]??(stripos($match['label'],'Final')!==false?'Winner M11 · Winner M13':null);}unset($match);
+ }
+ return $result;
+}
 function savePlayoffs(string $eventId,array $playoffs): int {
  $matches=[];$videos=[];$labels=[];
- foreach($playoffs as $number=>$row){$matches[$number]=$row['teams'];$videos[$number]=$row['video_url'];$labels[$number]=$row['label'];}
- return saveOfficialData($eventId,[],$matches,$videos,'elimination',$labels);
+ foreach($playoffs as $number=>$row)if(count($row['teams'])===6){$matches[$number]=$row['teams'];$videos[$number]=$row['video_url'];$labels[$number]=$row['label'];}
+ $protected=saveOfficialData($eventId,[],$matches,$videos,'elimination',$labels);
+ foreach($playoffs as $number=>$row)query("INSERT INTO matches(id,event_id,stage,match_number,label,video_url,official_result) VALUES(?,?,'elimination',?,?,?,?) ON CONFLICT(event_id,stage,match_number) DO UPDATE SET label=EXCLUDED.label,video_url=EXCLUDED.video_url,official_result=EXCLUDED.official_result",[uuid(),$eventId,$number,$row['label'],$row['video_url'],json_encode($row,JSON_THROW_ON_ERROR)]);
+ return $protected;
+}
+function renderPlayoffBracket(array $rows): void {
+ $rounds=[];
+ foreach($rows as $row){$data=json_decode($row['official_result']??'{}',true)?:[];$round=$data['round']??(preg_match('/\(R(\d+)\)/',$row['label']??'',$m)?(int)$m[1]:null);$group=$round?'Round '.$round:(stripos($row['label']??'','Final')!==false?'Finals':'Playoffs');$rounds[$group][]=$row;}
+ echo '<div class="playoff-bracket" aria-label="Playoff bracket">';
+ foreach($rounds as $round=>$matches){echo '<div class="playoff-round"><h3>'.h($round).'</h3>';
+  foreach($matches as $match){$data=json_decode($match['official_result']??'{}',true)?:[];$label=matchLabel($match);$red=$data['red_score']??null;$blue=$data['blue_score']??null;
+   echo '<article class="playoff-card"><div class="playoff-card-header"><a href="/?p=match&stage=elimination&n='.h($match['match_number']).'">'.h($label).'</a>';
+   if($match['video_url'])echo '<a class="video-link" href="'.h($match['video_url']).'" target="_blank" rel="noopener noreferrer" aria-label="Watch '.h($label).' video" title="Watch match video"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 5.5v13l10-6.5z"/></svg></a>';
+   echo '</div>';
+   $six=$data['teams']??[];
+   if(!$six){$slots=query('SELECT position,team_number FROM slots WHERE match_id=?',[$match['id']])->fetchAll(PDO::FETCH_KEY_PAIR);foreach(['R1','R2','R3','B1','B2','B3'] as $pos)$six[]=$slots[$pos]??0;}
+   foreach(['red','blue'] as $i=>$color){$score=$i?$blue:$red;$opponent=$i?$red:$blue;$alliance=$data[$color.'_alliance']??null;
+    echo '<div class="playoff-alliance '.$color.($score!==null&&$opponent!==null&&$score>$opponent?' winner':'').'"><div><strong>'.($alliance?'Alliance '.h($alliance):ucfirst($color).' alliance').'</strong><div class="playoff-teams">';
+    $teams=array_filter(array_slice($six,$i*3,3));if(!$teams)echo '<span>Teams TBD</span>';foreach($teams as $team)echo '<a href="/?p=team&n='.h($team).'">'.teamNumber($team).'</a>';
+    echo '</div></div><strong class="playoff-score">'.($score===null?'—':h($score)).'</strong></div>';
+   }
+   echo '<small class="playoff-state">'.($red!==null&&$blue!==null?'Official result':'Awaiting result').'</small>';if(!empty($data['source']))echo '<small class="playoff-state">'.h($data['source']).'</small>';echo '</article>';
+  }echo '</div>';
+ }echo '</div>';
 }
 function eventType(string $name): string {
  if(stripos($name,'FIRST Championship')!==false) return 'worlds';
@@ -197,8 +233,13 @@ function page(string $title,bool $wide=false,bool $showHeading=true): void {
 function renderMatchSection(string $eventId,string $stage): void {
  $rows=query('SELECT * FROM matches WHERE event_id=? AND stage=? ORDER BY match_number',[$eventId,$stage])->fetchAll(PDO::FETCH_ASSOC);
  $title=$stage==='qualification'?'Qualification Matches':'Elimination Matches';
- echo '<details class="match-section" open><summary><span>'.h($title).'</span><small>'.count($rows).' matches</small></summary>';
- if(!$rows){echo '<p class="empty-matches">No '.h(strtolower($title)).' have been loaded yet. Admins can use Refresh official data when FIRST publishes them.</p></details>';return;}
+ echo '<details class="match-section" open><summary><span>'.h($title).'</span>';
+ if($stage==='elimination'){echo '<button class="refresh-playoffs" type="submit" form="refreshPlayoffsForm" onclick="event.stopPropagation()">Refresh Playoff Data</button>';}
+ echo '<small>'.count($rows).' matches</small></summary>';
+ if($stage==='elimination')echo '<form id="refreshPlayoffsForm" class="refresh-playoffs-form" method="post" action="/?p=refresh_playoffs">'.csrf().'</form>';
+
+ if(!$rows){echo '<p class="empty-matches">No '.h(strtolower($title)).' have been loaded yet. Refresh official data when FIRST publishes them.</p></details>';return;}
+ if($stage==='elimination')renderPlayoffBracket($rows);
  echo '<div class="scroll"><table class="match-table"><colgroup><col class="match-number-col"><col class="match-video-col"><col span="6"></colgroup><thead><tr><th>Match</th><th>Video</th>';
  foreach(['R1','R2','R3','B1','B2','B3'] as $pos)echo '<th class="'.($pos[0]==='R'?'red':'blue').'-head">'.h($pos).'</th>';
  echo '</tr></thead><tbody>';
@@ -230,6 +271,16 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
  $e=event();$uid=$_SESSION['user']['id'];
  if($p==='event'&&role('admin')) { $year=(int)($_POST['year']??0);$code=strtoupper(trim($_POST['event_code']??''));$selected=query('SELECT * FROM event_catalog WHERE year=? AND code=?',[$year,$code])->fetch(PDO::FETCH_ASSOC);if(!$selected){http_response_code(400);exit('Choose an event from the list');}[$teams,$matches,$teamPage,$schedulePage,$videos,$playoffs,$playoffPage]=officialData($year,$code);db()->beginTransaction();try{query('UPDATE events SET active=false');$id=query('INSERT INTO events(id,name,event_key,active) VALUES(?,?,?,true) ON CONFLICT(event_key) DO UPDATE SET name=EXCLUDED.name,active=true RETURNING id',[uuid(),$selected['name'],(string)$year.strtolower($code)])->fetchColumn();$protected=saveOfficialData($id,$teams,$matches,$schedulePage?$videos:null);if($playoffPage)$protected+=savePlayoffs($id,$playoffs);db()->commit();}catch(Throwable $ex){db()->rollBack();throw $ex;}$_SESSION['flash_type']='success';$_SESSION['flash']='Selected event: '.$selected['name'].': imported '.count($teams).' teams and '.count($matches).' qualification matches and '.count($playoffs).' elimination matches.'.(!$teamPage||!$schedulePage?' Some official pages were unavailable; use Refresh official data later.':'').($protected?' '.$protected.' scouted positions kept their prior team assignments.':'');go('admin');}
  if($p==='refresh_event'&&role('admin')&&$e&&preg_match('/^(\d{4})([a-z0-9]+)$/',$e['event_key']??'',$parts)){[$teams,$matches,$teamPage,$schedulePage,$videos,$playoffs,$playoffPage]=officialData((int)$parts[1],strtoupper($parts[2]));db()->beginTransaction();try{$protected=saveOfficialData($e['id'],$teams,$matches,$schedulePage?$videos:null);if($playoffPage)$protected+=savePlayoffs($e['id'],$playoffs);db()->commit();}catch(Throwable $ex){db()->rollBack();throw $ex;}$_SESSION['flash']='Refreshed '.count($teams).' teams and '.count($matches).' qualification matches and '.count($playoffs).' elimination matches.'.(!$teamPage||!$schedulePage?' Some official pages were unavailable.':'').($protected?' '.$protected.' scouted positions retained.':'');go('admin');}
+ if($p==='refresh_playoffs'){
+  if(!$e||!preg_match('/^(\d{4})([a-z0-9]+)$/',$e['event_key']??'',$parts)){$_SESSION['flash']='Select an official event in Admin first.';go('matches');}
+  $year=(int)$parts[1];$code=strtoupper($parts[2]);$ctx=stream_context_create(['http'=>['timeout'=>20,'user_agent'=>'2370 Scouting (playoff refresh)','header'=>"Cache-Control: no-cache\r\n"]]);
+  $html=@file_get_contents("https://frc-events.firstinspires.org/$year/".rawurlencode($code).'/playoffs',false,$ctx);
+  if(!$html||stripos($html,'Playoff Results')===false){$_SESSION['flash']='FIRST playoff data is unavailable. Existing matches and results were kept.';go('matches');}
+  $playoffs=parsePlayoffs($html,$year,$code);
+  if(!$playoffs){$_SESSION['flash']='FIRST has not published playoff matches yet, or its page could not be read. Existing data was kept.';go('matches');}
+  db()->beginTransaction();try{$protected=savePlayoffs($e['id'],$playoffs);db()->commit();}catch(Throwable $ex){db()->rollBack();throw $ex;}
+  $_SESSION['flash_type']='success';$_SESSION['flash']='Refreshed '.count($playoffs).' playoff matches, official scores, and video links.'.($protected?' '.$protected.' scouted positions retained their prior assignments.':'');go('matches');
+ }
  if($p==='user'&&role('admin')) {if(strlen($_POST['password']??'')<10) {$_SESSION['flash']='Password must be at least 10 characters';go('admin');}query('INSERT INTO users(id,name,password_hash,role,position) VALUES(?,?,?,?,?)',[uuid(),trim($_POST['name']),password_hash($_POST['password'],PASSWORD_DEFAULT),$_POST['role'],$_POST['position']?:null]);go('admin');}
  if($p==='reset_password'&&role('admin')){
   $target=query('SELECT id,name FROM users WHERE id::text=?',[(string)($_POST['user_id']??'')])->fetch(PDO::FETCH_ASSOC);
