@@ -108,3 +108,5 @@ header{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align
 .team-grid .team-card-body{background:#e2ebf4;border-top:1px solid #bdccdc}.dark-mode .team-grid .team-card-body{background:#30465d;border-top-color:#617a94}
 
 .team-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.team-grid .team-card-body,.dark-mode .team-grid .team-card-body{background:#e8edf3;border-top-color:#b8c6d5;color:#223349}.team-grid .team-card-body h2 a,.dark-mode .team-grid .team-card-body h2 a{color:#223349}@media(max-width:850px){.team-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:650px){.team-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:400px){.team-grid{grid-template-columns:1fr}}
+
+.pick-bucket .pick-card-title h2,.pick-bucket .pick-card-title h2 a,.pick-bucket .pick-card-title .team-number{font-weight:400}.dark-mode .pick-bucket .pick-card,.dark-mode .pick-bucket .pick-card.picked,.dark-mode .pick-bucket .pick-card.do-not-pick,.dark-mode .already-picked .pick-card{background:#e5e7eb;border-color:#b6bec8;color:#263445}.dark-mode .pick-bucket .pick-card-title h2 a{color:#263445}
