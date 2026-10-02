@@ -140,7 +140,7 @@ function renderFirstStyleBracket(array $rows): void {
   $match=$matches[$number]??null;$data=$match?json_decode($match['official_result']??'{}',true):[];$data=$data?:[];
   $round=[1=>1,2=>1,3=>1,4=>1,5=>2,6=>2,7=>2,8=>2,9=>3,10=>3,11=>4,12=>4,13=>5][$number];
   $label=$match?matchLabel($match):'Match '.$number.' (R'.$round.')';
-  echo '<article class="first-match-card" data-match="'.h($number).'" style="left:'.h($column*260/1500*100).'%;top:'.h($center*1.3-60).'px"><div class="first-match-header">';
+  echo '<article class="first-match-card" data-match="'.h($number).'" style="left:'.h($column*260/1500*100).'%;top:'.h($center*1.3-58.5).'px"><div class="first-match-header">';
   if($match)echo '<a href="/?p=match&stage=elimination&n='.h($number).'">'.h($label).'</a>';else echo '<strong>'.h($label).'</strong>';
   if($match&&$match['video_url'])echo '<a class="video-link" href="'.h($match['video_url']).'" target="_blank" rel="noopener noreferrer" title="Watch match video" aria-label="Watch '.h($label).' video">▶</a>';
   echo '</div>';
