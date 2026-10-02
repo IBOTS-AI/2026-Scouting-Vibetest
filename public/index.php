@@ -333,11 +333,11 @@ function renderMatchSection(string $eventId,string $stage): void {
 
  if(!$rows){echo '<p class="empty-matches">No '.h(strtolower($title)).' have been loaded yet. Refresh official data when FIRST publishes them.</p></details>';return;}
  if($stage==='elimination')renderPlayoffBracket($rows);
- echo '<div class="scroll"><table class="match-table"><colgroup><col class="match-number-col"><col class="match-video-col"><col span="6"></colgroup><thead><tr><th>Match</th><th>Video</th>';
- foreach(['R1','R2','R3','B1','B2','B3'] as $pos)echo '<th class="'.($pos[0]==='R'?'red':'blue').'-head">'.h($pos).'</th>';
+ echo '<div class="scroll"><table class="match-table"><colgroup><col class="match-number-col"><col class="match-video-col"><col span="3"><col class="alliance-score-col" span="2"><col span="3"></colgroup><thead><tr><th>Match</th><th>Video</th>';
+ foreach(['R1','R2','R3','B1','B2','B3'] as $pos){echo '<th class="'.($pos[0]==='R'?'red':'blue').'-head">'.h($pos).'</th>';if($pos==='R3')echo '<th class="red-head alliance-score-heading">Red Score</th><th class="blue-head alliance-score-heading">Blue Score</th>';}
  echo '</tr></thead><tbody>';
  foreach($rows as $rowIndex=>$m){
-  if($rowIndex>0)echo '<tr class="match-row-spacer" aria-hidden="true"><td colspan="8"></td></tr>';
+  if($rowIndex>0)echo '<tr class="match-row-spacer" aria-hidden="true"><td colspan="10"></td></tr>';
   $number=(int)$m['match_number'];$label=matchLabel($m);$official=json_decode($m['official_result']??'{}',true)?:[];$actualWinner=officialWinner($official);
   echo '<tr><th scope="row"><a class="match-number-link" href="/?p=match&stage='.h($stage).'&n='.$number.'" aria-label="View '.h($title).' '.h($label).'">'.h($label).'</a></th><td class="match-video-cell">';
   if($m['video_url'])echo '<a class="video-link" href="'.h($m['video_url']).'" target="_blank" rel="noopener noreferrer" aria-label="Watch '.h($label).' video" title="Watch match video"><svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 5.5v13l10-6.5z"/></svg></a>';
@@ -349,6 +349,7 @@ function renderMatchSection(string $eventId,string $stage): void {
    if($slot)echo '<div class="slot-line"><a class="team-performance-link" href="/?p=team&n='.h($slot['team_number']).'" aria-label="View performance for team '.h($slot['team_number']).'">'.teamNumber($slot['team_number']).'</a><a class="scout-button '.($slot['scouting_status']==='submitted'?'scouted':'unscouted').'" href="/?p=scout&id='.h($slot['id']).'">'.($slot['scouting_status']==='submitted'?'Re-Scout':'Scout').'</a><span class="scouting-status">'.($slot['scouting_status']==='submitted'?'Scouted 1 time':'Not Scouted').'</span></div>';
    else echo '—';
    echo '</td>';
+   if($pos==='R3')foreach(['red','blue'] as $scoreAlliance)echo '<td class="'.$scoreAlliance.'-cell alliance-score-cell'.($actualWinner===$scoreAlliance?' alliance-won':'').'" title="Official '.h($scoreAlliance).' alliance score">'.h($official[$scoreAlliance.'_score']??'—').'</td>';
   }
   echo '</tr>';
  }
