@@ -132,7 +132,7 @@ function renderFirstStyleBracket(array $rows): void {
   'M980 520 H1010 V465 H1040',
   'M980 245 H1270 V465 H1240','M1270 355 H1300'
  ];
- echo '<div class="playoff-bracket first-style-bracket" aria-label="Playoff bracket"><div class="first-bracket-board"><svg class="first-bracket-lines" width="1500" height="768" viewBox="0 0 1500 640" preserveAspectRatio="none" aria-hidden="true" focusable="false">';
+ echo '<div class="playoff-bracket first-style-bracket" aria-label="Playoff bracket"><div class="first-bracket-board"><svg class="first-bracket-lines" width="1500" height="832" viewBox="0 0 1500 640" preserveAspectRatio="none" aria-hidden="true" focusable="false">';
  foreach($paths as $path)echo '<path d="'.h($path).'" fill="none" stroke="#9aa3ad" stroke-width="2" stroke-linejoin="round"/>';
  echo '</svg>';
  foreach(['Round 1','Round 2','Round 3','Round 4','Round 5','Finals'] as $i=>$title)echo '<h3 class="first-round-title" style="left:'.h($i*260/1500*100).'%">'.h($title).'</h3>';
@@ -140,7 +140,7 @@ function renderFirstStyleBracket(array $rows): void {
   $match=$matches[$number]??null;$data=$match?json_decode($match['official_result']??'{}',true):[];$data=$data?:[];
   $round=[1=>1,2=>1,3=>1,4=>1,5=>2,6=>2,7=>2,8=>2,9=>3,10=>3,11=>4,12=>4,13=>5][$number];
   $label=$match?matchLabel($match):'Match '.$number.' (R'.$round.')';
-  echo '<article class="first-match-card" data-match="'.h($number).'" style="left:'.h($column*260/1500*100).'%;top:'.h($center*1.2-62).'px"><div class="first-match-header">';
+  echo '<article class="first-match-card" data-match="'.h($number).'" style="left:'.h($column*260/1500*100).'%;top:'.h($center*1.3-70).'px"><div class="first-match-header">';
   if($match)echo '<a href="/?p=match&stage=elimination&n='.h($number).'">'.h($label).'</a>';else echo '<strong>'.h($label).'</strong>';
   if($match&&$match['video_url'])echo '<a class="video-link" href="'.h($match['video_url']).'" target="_blank" rel="noopener noreferrer" title="Watch match video" aria-label="Watch '.h($label).' video">▶</a>';
   echo '</div>';
@@ -154,7 +154,7 @@ function renderFirstStyleBracket(array $rows): void {
   if(isset($origins[$number]))echo '<small class="first-match-source">'.h($origins[$number]).'</small>';
   echo '</article>';
  }
- echo '<article class="first-finals-card" style="left:86.666667%;top:336px"><h3>FINALS</h3>';
+ echo '<article class="first-finals-card" style="left:86.666667%;top:364px"><h3>FINALS</h3>';
  $allianceNumbers=[];$wins=[];
  foreach($finals as $final){$data=json_decode($final['official_result']??'{}',true)?:[];foreach(['red','blue'] as $color){$alliance=$data[$color.'_alliance']??null;if($alliance&&!in_array($alliance,$allianceNumbers,true))$allianceNumbers[]=$alliance;}if(isset($data['red_score'],$data['blue_score'])&&$data['red_score']!==$data['blue_score']){$winner=$data[$data['red_score']>$data['blue_score']?'red_alliance':'blue_alliance']??null;if($winner)$wins[$winner]=($wins[$winner]??0)+1;}}
  for($i=0;$i<2;$i++){$alliance=$allianceNumbers[$i]??null;echo '<div class="first-alliance '.($i?'blue':'red').'"><strong>'.($alliance?'Alliance '.h($alliance):'TBD').'</strong><strong>'.($alliance?h($wins[$alliance]??0):'—').'</strong></div>';}
