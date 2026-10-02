@@ -120,10 +120,10 @@ function savePlayoffs(string $eventId,array $playoffs): int {
 function renderPlayoffBracket(array $rows): void {
  $rounds=[];
  foreach($rows as $row){$data=json_decode($row['official_result']??'{}',true)?:[];$round=$data['round']??(preg_match('/\(R(\d+)\)/',$row['label']??'',$m)?(int)$m[1]:null);$group=$round?'Round '.$round:(stripos($row['label']??'','Final')!==false?'Finals':'Playoffs');$rounds[$group][]=$row;}
- echo '<div class="playoff-bracket" aria-label="Playoff bracket">';
+ echo '<div class="playoff-legend"><span class="winner-route">Solid green arrow: winner advances</span><span class="loser-route">Dashed orange arrow: loser advances</span></div><div class="playoff-bracket" aria-label="Playoff bracket"><div class="playoff-board"><svg class="playoff-connectors" aria-hidden="true" focusable="false"></svg>';
  foreach($rounds as $round=>$matches){echo '<div class="playoff-round"><h3>'.h($round).'</h3>';
   foreach($matches as $match){$data=json_decode($match['official_result']??'{}',true)?:[];$label=matchLabel($match);$red=$data['red_score']??null;$blue=$data['blue_score']??null;
-   echo '<article class="playoff-card"><div class="playoff-card-header"><a href="/?p=match&stage=elimination&n='.h($match['match_number']).'">'.h($label).'</a>';
+   echo '<article class="playoff-card" data-match="'.h($match['match_number']).'" data-source="'.h($data['source']??'').'"><div class="playoff-card-header"><a href="/?p=match&stage=elimination&n='.h($match['match_number']).'">'.h($label).'</a>';
    if($match['video_url'])echo '<a class="video-link" href="'.h($match['video_url']).'" target="_blank" rel="noopener noreferrer" aria-label="Watch '.h($label).' video" title="Watch match video"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 5.5v13l10-6.5z"/></svg></a>';
    echo '</div>';
    $six=$data['teams']??[];
@@ -135,7 +135,7 @@ function renderPlayoffBracket(array $rows): void {
    }
    echo '<small class="playoff-state">'.($red!==null&&$blue!==null?'Official result':'Awaiting result').'</small>';if(!empty($data['source']))echo '<small class="playoff-state">'.h($data['source']).'</small>';echo '</article>';
   }echo '</div>';
- }echo '</div>';
+ }echo '</div></div><script src="'.h(asset('playoff-bracket.js')).'" defer></script>';
 }
 function eventType(string $name): string {
  if(stripos($name,'FIRST Championship')!==false) return 'worlds';
@@ -233,7 +233,7 @@ function page(string $title,bool $wide=false,bool $showHeading=true): void {
 function renderMatchSection(string $eventId,string $stage): void {
  $rows=query('SELECT * FROM matches WHERE event_id=? AND stage=? ORDER BY match_number',[$eventId,$stage])->fetchAll(PDO::FETCH_ASSOC);
  $title=$stage==='qualification'?'Qualification Matches':'Elimination Matches';
- echo '<details class="match-section" open><summary><span>'.h($title).'</span>';
+ echo '<details class="match-section '.($stage==='elimination'?'elimination-section':'qualification-section').'" open><summary><span>'.h($title).'</span>';
  if($stage==='elimination'){echo '<button class="refresh-playoffs" type="submit" form="refreshPlayoffsForm" onclick="event.stopPropagation()">Refresh Playoff Data</button>';}
  echo '<small>'.count($rows).' matches</small></summary>';
  if($stage==='elimination')echo '<form id="refreshPlayoffsForm" class="refresh-playoffs-form" method="post" action="/?p=refresh_playoffs">'.csrf().'</form>';
