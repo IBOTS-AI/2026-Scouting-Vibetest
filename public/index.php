@@ -118,11 +118,14 @@ function savePlayoffs(string $eventId,array $playoffs): int {
  return $protected;
 }
 function renderPlayoffBracket(array $rows): void {
- $rounds=[];
+ $rounds=[];$sources=[];
+ foreach($rows as $row)if((int)$row['match_number']===4&&preg_match('/^Match 4 \(R1\)$/',$row['label']??'')){
+  $sources=[5=>'Loser M1 · Loser M2',6=>'Loser M3 · Loser M4',7=>'Winner M1 · Winner M2',8=>'Winner M3 · Winner M4',9=>'Loser M7 · Winner M6',10=>'Loser M8 · Winner M5',11=>'Winner M7 · Winner M8',12=>'Winner M10 · Winner M9',13=>'Loser M11 · Winner M12'];break;
+ }
  foreach($rows as $row){$data=json_decode($row['official_result']??'{}',true)?:[];$round=$data['round']??(preg_match('/\(R(\d+)\)/',$row['label']??'',$m)?(int)$m[1]:null);$group=$round?'Round '.$round:(stripos($row['label']??'','Final')!==false?'Finals':'Playoffs');$rounds[$group][]=$row;}
  echo '<div class="playoff-legend"><span class="winner-route">Solid green arrow: winner advances</span><span class="loser-route">Dashed orange arrow: loser advances</span></div><div class="playoff-bracket" aria-label="Playoff bracket"><div class="playoff-board"><svg class="playoff-connectors" aria-hidden="true" focusable="false"></svg>';
  foreach($rounds as $round=>$matches){echo '<div class="playoff-round"><h3>'.h($round).'</h3>';
-  foreach($matches as $match){$data=json_decode($match['official_result']??'{}',true)?:[];$label=matchLabel($match);$red=$data['red_score']??null;$blue=$data['blue_score']??null;
+  foreach($matches as $match){$data=json_decode($match['official_result']??'{}',true)?:[];$label=matchLabel($match);if(empty($data['source'])&&$sources)$data['source']=$sources[(int)$match['match_number']]??(stripos($label,'Final')!==false?'Winner M11 · Winner M13':'');$red=$data['red_score']??null;$blue=$data['blue_score']??null;
    echo '<article class="playoff-card" data-match="'.h($match['match_number']).'" data-source="'.h($data['source']??'').'"><div class="playoff-card-header"><a href="/?p=match&stage=elimination&n='.h($match['match_number']).'">'.h($label).'</a>';
    if($match['video_url'])echo '<a class="video-link" href="'.h($match['video_url']).'" target="_blank" rel="noopener noreferrer" aria-label="Watch '.h($label).' video" title="Watch match video"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 5.5v13l10-6.5z"/></svg></a>';
    echo '</div>';
@@ -135,7 +138,7 @@ function renderPlayoffBracket(array $rows): void {
    }
    echo '<small class="playoff-state">'.($red!==null&&$blue!==null?'Official result':'Awaiting result').'</small>';if(!empty($data['source']))echo '<small class="playoff-state">'.h($data['source']).'</small>';echo '</article>';
   }echo '</div>';
- }echo '</div></div><script src="'.h(asset('playoff-bracket.js')).'" defer></script>';
+ }echo '</div></div>';
 }
 function eventType(string $name): string {
  if(stripos($name,'FIRST Championship')!==false) return 'worlds';
