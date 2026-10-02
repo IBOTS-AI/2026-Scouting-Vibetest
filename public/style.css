@@ -94,3 +94,5 @@ header{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align
 .first-match-card .first-alliance{padding-top:5px;padding-bottom:5px}.first-match-card .first-match-header{padding-top:3px;padding-bottom:3px}
 
 .first-match-card{grid-template-rows:24px 42px 42px 21px;height:133px;min-height:133px}.first-match-card .first-alliance{height:42px;padding-top:7px;padding-bottom:7px}
+
+.first-bracket-board,.first-bracket-lines{height:960px}.first-match-card{grid-template-rows:24px 50px 50px 21px;height:149px;min-height:149px}.first-match-card .first-alliance{height:50px;padding-top:11px;padding-bottom:11px}
