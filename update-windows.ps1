@@ -19,6 +19,7 @@ $files = @(
     'public/team-charts.php',
     'public/admin-page.php',
     'public/navigation.js',
+    'public/playoff-bracket.js',
     'public/style.css',
     'public/dashboard.js',
     'public/auto-path.js',
@@ -55,6 +56,7 @@ $checks = @{
     'public/team-charts.php' = '/var/www/html/team-charts.php'
     'public/admin-page.php' = '/var/www/html/admin-page.php'
     'public/navigation.js' = '/var/www/html/navigation.js'
+    'public/playoff-bracket.js' = '/var/www/html/playoff-bracket.js'
     'public/style.css' = '/var/www/html/style.css'
     'public/dashboard.js' = '/var/www/html/dashboard.js'
     'public/auto-path.js' = '/var/www/html/auto-path.js'
