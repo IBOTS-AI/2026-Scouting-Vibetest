@@ -62,6 +62,38 @@ function districtCodes(int $year,string $district,bool $refresh=false): array {
  }
  return $codes;
 }
+function parseQualificationResults(string $html): array {
+ $results=[];
+ if(!preg_match_all('~<tr\b[^>]*\bid="match(\d+)a"[^>]*>(.*?)</tr>~si',$html,$rows,PREG_SET_ORDER))return [];
+ foreach($rows as $row){
+  preg_match_all('~<td\b[^>]*>(.*?)</td>~si',$row[2],$cells);
+  if(count($cells[1])<10)continue;
+  $scores=[];foreach(array_slice($cells[1],-2) as $cell){$text=trim(html_entity_decode(strip_tags($cell),ENT_QUOTES|ENT_HTML5,'UTF-8'));$scores[]=preg_match('/^\d+$/',$text)?(int)$text:null;}
+  if($scores[0]!==null&&$scores[1]!==null)$results[(int)$row[1]]=['red_score'=>$scores[0],'blue_score'=>$scores[1]];
+ }
+ return $results;
+}
+function officialWinner(array $result): ?string {
+ if(!isset($result['red_score'],$result['blue_score'])||$result['red_score']===$result['blue_score'])return null;
+ return $result['red_score']>$result['blue_score']?'red':'blue';
+}
+function saveMatchResults(string $eventId,string $stage,array $results): void {
+ foreach($results as $number=>$result){if(!isset($result['red_score'],$result['blue_score']))continue;
+  query("UPDATE matches SET official_result=COALESCE(official_result,'{}'::jsonb) || ?::jsonb WHERE event_id=? AND stage=? AND match_number=?",[json_encode(['red_score'=>$result['red_score'],'blue_score'=>$result['blue_score']],JSON_THROW_ON_ERROR),$eventId,$stage,$number]);
+ }
+}
+function refreshMatchResults(array $event,string $stage): void {
+ if(!preg_match('/^(\d{4})([a-z0-9]+)$/',$event['event_key']??'',$parts))return;
+ $key=$event['id'].':'.$stage;
+ if(time()-($_SESSION['results_checked'][$key]??0)<60)return;
+ $_SESSION['results_checked'][$key]=time();
+ $path=$stage==='elimination'?'playoffs':'qualifications';
+ $ctx=stream_context_create(['http'=>['timeout'=>5,'user_agent'=>'2370 Scouting (match results)','header'=>"Cache-Control: no-cache\r\n"]]);
+ $html=@file_get_contents('https://frc-events.firstinspires.org/'.$parts[1].'/'.strtoupper($parts[2]).'/'.$path,false,$ctx);
+ if(!$html)return;
+ $results=$stage==='elimination'?parsePlayoffs($html,(int)$parts[1],strtoupper($parts[2])):parseQualificationResults($html);
+ saveMatchResults($event['id'],$stage,$results);
+}
 function officialData(int $year,string $code): array {
  $base="https://frc-events.firstinspires.org/$year/".rawurlencode($code);
  $ctx=stream_context_create(['http'=>['timeout'=>15,'user_agent'=>'2370 Scouting local prototype (official event import)']]);
@@ -72,7 +104,7 @@ function officialData(int $year,string $code): array {
  if($eventHtml && preg_match_all('~<div class="col-3 col-md-1 fw-bold">\s*(\d+)\s*</div>\s*<div class="col-6">\s*([^<]+)\s*</div>~si',$eventHtml,$found,PREG_SET_ORDER))foreach($found as $m)$teams[(int)$m[1]]=html_entity_decode(trim($m[2]),ENT_QUOTES|ENT_HTML5,'UTF-8');
  if($qualHtml && preg_match_all('~<tr\b[^>]*\bid="match(\d+)a"[^>]*>(.*?)</tr>~si',$qualHtml,$rows,PREG_SET_ORDER))foreach($rows as $row){preg_match_all('~href="/'.$year.'/team/(\d+)"~si',$row[2],$numbers);$six=array_slice(array_map('intval',$numbers[1]),0,6);if(count($six)===6&&min($six)>0){$number=(int)$row[1];$matches[$number]=$six;$videos[$number]=preg_match('~\btitle=["\']Match Video Available["\']~i',$row[2])?$base.'/qualifications/'.$number:null;}}
  $playoffs=$playoffHtml?parsePlayoffs($playoffHtml,$year,$code):[];
- return [$teams,$matches,(bool)$eventHtml,(bool)$qualHtml,$videos,$playoffs,(bool)$playoffHtml];
+ return [$teams,$matches,(bool)$eventHtml,(bool)$qualHtml,$videos,$playoffs,(bool)$playoffHtml,$qualHtml?parseQualificationResults($qualHtml):[]];
 }
 function saveOfficialData(string $eventId,array $teams,array $matches,?array $videos=null,string $stage='qualification',array $labels=[]): int {
  foreach($teams as $number=>$name)query('INSERT INTO teams(event_id,number,name) VALUES(?,?,?) ON CONFLICT(event_id,number) DO UPDATE SET name=EXCLUDED.name',[$eventId,$number,$name]);
@@ -306,14 +338,14 @@ function renderMatchSection(string $eventId,string $stage): void {
  echo '</tr></thead><tbody>';
  foreach($rows as $rowIndex=>$m){
   if($rowIndex>0)echo '<tr class="match-row-spacer" aria-hidden="true"><td colspan="8"></td></tr>';
-  $number=(int)$m['match_number'];$label=matchLabel($m);
+  $number=(int)$m['match_number'];$label=matchLabel($m);$official=json_decode($m['official_result']??'{}',true)?:[];$actualWinner=officialWinner($official);
   echo '<tr><th scope="row"><a class="match-number-link" href="/?p=match&stage='.h($stage).'&n='.$number.'" aria-label="View '.h($title).' '.h($label).'">'.h($label).'</a></th><td class="match-video-cell">';
   if($m['video_url'])echo '<a class="video-link" href="'.h($m['video_url']).'" target="_blank" rel="noopener noreferrer" aria-label="Watch '.h($label).' video" title="Watch match video"><svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 5.5v13l10-6.5z"/></svg></a>';
   else echo '<span class="no-video">No Video</span>';
   echo '</td>';
   foreach(['R1','R2','R3','B1','B2','B3'] as $pos){
    $alliance=$pos[0]==='R'?'red':'blue';$slot=query('SELECT s.*,sc.status AS scouting_status FROM slots s LEFT JOIN scouting sc ON sc.slot_id=s.id WHERE s.match_id=? AND s.position=?',[$m['id'],$pos])->fetch(PDO::FETCH_ASSOC);
-   echo '<td class="'.$alliance.'-cell">';
+   echo '<td class="'.$alliance.'-cell'.($actualWinner===$alliance?' alliance-won':'').'"'.($actualWinner===$alliance?' title="Won this match · Official score '.h($official[$alliance.'_score']).'"':'').'>';
    if($slot)echo '<div class="slot-line"><a class="team-performance-link" href="/?p=team&n='.h($slot['team_number']).'" aria-label="View performance for team '.h($slot['team_number']).'">'.teamNumber($slot['team_number']).'</a><a class="scout-button '.($slot['scouting_status']==='submitted'?'scouted':'unscouted').'" href="/?p=scout&id='.h($slot['id']).'">'.($slot['scouting_status']==='submitted'?'Re-Scout':'Scout').'</a><span class="scouting-status">'.($slot['scouting_status']==='submitted'?'Scouted 1 time':'Not Scouted').'</span></div>';
    else echo '—';
    echo '</td>';
@@ -331,8 +363,8 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
  if($p==='login') { $u=query('SELECT * FROM users WHERE name=?',[trim($_POST['name']??'')])->fetch(PDO::FETCH_ASSOC);if($u&&password_verify($_POST['password']??'',$u['password_hash'])) {session_regenerate_id(true);$_SESSION['user']=['id'=>$u['id'],'name'=>$u['name'],'role'=>$u['role'],'position'=>$u['position']];$_SESSION['csrf']=bin2hex(random_bytes(16));go('home');} $_SESSION['flash']='Invalid login';go('login'); }
  if(!isset($_SESSION['user']) || !hash_equals($_SESSION['csrf']??'',$_POST['csrf']??'')){http_response_code(403);exit('Invalid session');}
  $e=event();$uid=$_SESSION['user']['id'];
- if($p==='event'&&role('admin')) { $year=(int)($_POST['year']??0);$code=strtoupper(trim($_POST['event_code']??''));$selected=query('SELECT * FROM event_catalog WHERE year=? AND code=?',[$year,$code])->fetch(PDO::FETCH_ASSOC);if(!$selected){http_response_code(400);exit('Choose an event from the list');}[$teams,$matches,$teamPage,$schedulePage,$videos,$playoffs,$playoffPage]=officialData($year,$code);db()->beginTransaction();try{query('UPDATE events SET active=false');$id=query('INSERT INTO events(id,name,event_key,active) VALUES(?,?,?,true) ON CONFLICT(event_key) DO UPDATE SET name=EXCLUDED.name,active=true RETURNING id',[uuid(),$selected['name'],(string)$year.strtolower($code)])->fetchColumn();$protected=saveOfficialData($id,$teams,$matches,$schedulePage?$videos:null);if($playoffPage)$protected+=savePlayoffs($id,$playoffs);db()->commit();}catch(Throwable $ex){db()->rollBack();throw $ex;}$_SESSION['flash_type']='success';$_SESSION['flash']='Selected event: '.$selected['name'].': imported '.count($teams).' teams and '.count($matches).' qualification matches and '.count($playoffs).' elimination matches.'.(!$teamPage||!$schedulePage?' Some official pages were unavailable; use Refresh official data later.':'').($protected?' '.$protected.' scouted positions kept their prior team assignments.':'');go('admin');}
- if($p==='refresh_event'&&role('admin')&&$e&&preg_match('/^(\d{4})([a-z0-9]+)$/',$e['event_key']??'',$parts)){[$teams,$matches,$teamPage,$schedulePage,$videos,$playoffs,$playoffPage]=officialData((int)$parts[1],strtoupper($parts[2]));db()->beginTransaction();try{$protected=saveOfficialData($e['id'],$teams,$matches,$schedulePage?$videos:null);if($playoffPage)$protected+=savePlayoffs($e['id'],$playoffs);db()->commit();}catch(Throwable $ex){db()->rollBack();throw $ex;}$_SESSION['flash']='Refreshed '.count($teams).' teams and '.count($matches).' qualification matches and '.count($playoffs).' elimination matches.'.(!$teamPage||!$schedulePage?' Some official pages were unavailable.':'').($protected?' '.$protected.' scouted positions retained.':'');go('admin');}
+ if($p==='event'&&role('admin')) { $year=(int)($_POST['year']??0);$code=strtoupper(trim($_POST['event_code']??''));$selected=query('SELECT * FROM event_catalog WHERE year=? AND code=?',[$year,$code])->fetch(PDO::FETCH_ASSOC);if(!$selected){http_response_code(400);exit('Choose an event from the list');}[$teams,$matches,$teamPage,$schedulePage,$videos,$playoffs,$playoffPage,$results]=officialData($year,$code);db()->beginTransaction();try{query('UPDATE events SET active=false');$id=query('INSERT INTO events(id,name,event_key,active) VALUES(?,?,?,true) ON CONFLICT(event_key) DO UPDATE SET name=EXCLUDED.name,active=true RETURNING id',[uuid(),$selected['name'],(string)$year.strtolower($code)])->fetchColumn();$protected=saveOfficialData($id,$teams,$matches,$schedulePage?$videos:null);saveMatchResults($id,'qualification',$results);if($playoffPage)$protected+=savePlayoffs($id,$playoffs);db()->commit();}catch(Throwable $ex){db()->rollBack();throw $ex;}$_SESSION['flash_type']='success';$_SESSION['flash']='Selected event: '.$selected['name'].': imported '.count($teams).' teams and '.count($matches).' qualification matches and '.count($playoffs).' elimination matches.'.(!$teamPage||!$schedulePage?' Some official pages were unavailable; use Refresh official data later.':'').($protected?' '.$protected.' scouted positions kept their prior team assignments.':'');go('admin');}
+ if($p==='refresh_event'&&role('admin')&&$e&&preg_match('/^(\d{4})([a-z0-9]+)$/',$e['event_key']??'',$parts)){[$teams,$matches,$teamPage,$schedulePage,$videos,$playoffs,$playoffPage,$results]=officialData((int)$parts[1],strtoupper($parts[2]));db()->beginTransaction();try{$protected=saveOfficialData($e['id'],$teams,$matches,$schedulePage?$videos:null);saveMatchResults($e['id'],'qualification',$results);if($playoffPage)$protected+=savePlayoffs($e['id'],$playoffs);db()->commit();}catch(Throwable $ex){db()->rollBack();throw $ex;}$_SESSION['flash']='Refreshed '.count($teams).' teams and '.count($matches).' qualification matches and '.count($playoffs).' elimination matches.'.(!$teamPage||!$schedulePage?' Some official pages were unavailable.':'').($protected?' '.$protected.' scouted positions retained.':'');go('admin');}
  if($p==='refresh_playoffs'){
   if(!$e||!preg_match('/^(\d{4})([a-z0-9]+)$/',$e['event_key']??'',$parts)){$_SESSION['flash']='Select an official event in Admin first.';go('matches');}
   $year=(int)$parts[1];$code=strtoupper($parts[2]);$ctx=stream_context_create(['http'=>['timeout'=>20,'user_agent'=>'2370 Scouting (playoff refresh)','header'=>"Cache-Control: no-cache\r\n"]]);
@@ -527,11 +559,12 @@ if($p==='home'){page('Dashboard',true,false);echo '<aside class="warn">Cloud syn
  $keys=['match_score','auto_score','teleop_score','defense_rating','defensive_vulnerability'];$rows=[];$bounds=[];foreach($teams as $team){$number=$team['number'];$entries=$byTeam[$number]??[];$metrics=[];foreach($keys as $key){$v=metricAverage($entries,$key,in_array($key,['defense_rating','defensive_vulnerability'],true)?5.0:null);$metrics[$key]=$v;if($v!==null)$bounds[$key][]=$v;}$lastNote='';foreach($entries as $entry)if(trim((string)($entry['notes']??''))!==''){$lastNote=trim($entry['notes']);break;}$notes=trim((string)($pitNotes[$number]??''));if($lastNote)$notes.=($notes?' | ':'').$lastNote;$rows[]=['number'=>$number,'name'=>$team['name'],'metrics'=>$metrics,'notes'=>$notes];}
  if(!$reports)echo '<aside class="warn">No submitted match reports for this event yet. Scouts can enter reports from the Matches page.</aside>';echo '<div class="scroll"><table class="dashboard-table" id="teamDashboard"><thead><tr>';$headers=['Team #','Team name','Avg match score','Avg autonomous','Avg teleop','Avg defensive ability','Avg defensive vulnerability','Notes'];foreach($headers as $i=>$label)echo '<th><button type="button" class="sort-head" data-col="'.h($i).'" aria-label="Sort by '.h($label).'">'.h($label).' <span aria-hidden="true">↕</span></button></th>';echo '</tr></thead><tbody>';foreach($rows as $row){$n=h($row['number']);echo '<tr><td data-value="'.$n.'"><a href="/?p=team&n='.$n.'">'.$n.'</a></td><td data-value="'.h(strtolower($row['name'])).'">'.h($row['name']).'</td>';foreach($keys as $key){$v=$row['metrics'][$key];$display=$v===null?'—':number_format($v,1,'.','');$values=$bounds[$key]??[];$style=$values?heatColor($v,min($values),max($values)):'';echo '<td class="metric" data-value="'.h($v===null?'':$v).'"'.($style?' style="'.h($style).'"':'').'>'.h($display).'</td>';}echo '<td class="notes-cell" data-value="'.h(strtolower($row['notes'])).'">'.h($row['notes']?:'—').'</td></tr>';}echo '</tbody></table></div><p class="dashboard-help">Click a column heading to sort. <span id="dashboardControlsStatus" role="status">Loading table controls…</span></p><script src="'.h(asset('dashboard.js')).'" defer></script>';}endpage();}
 elseif($p==='admin'){if(!role('admin')){http_response_code(403);exit('Admins only');}page('Administration');require __DIR__.'/admin-page.php';endpage();}
-elseif($p==='matches'){page('Matches',true,false);if($e){renderMatchSection($e['id'],'qualification');renderMatchSection($e['id'],'elimination');}endpage();}
+elseif($p==='matches'){if($e){refreshMatchResults($e,'qualification');refreshMatchResults($e,'elimination');}page('Matches',true,false);if($e){renderMatchSection($e['id'],'qualification');renderMatchSection($e['id'],'elimination');}endpage();}
 elseif($p==='match'){
- $number=(int)($_GET['n']??0);$stage=($_GET['stage']??'qualification')==='elimination'?'elimination':'qualification';$match=$e&&$number>0?query('SELECT * FROM matches WHERE event_id=? AND stage=? AND match_number=?',[$e['id'],$stage,$number])->fetch(PDO::FETCH_ASSOC):false;
+ $number=(int)($_GET['n']??0);$stage=($_GET['stage']??'qualification')==='elimination'?'elimination':'qualification';if($e)refreshMatchResults($e,$stage);$match=$e&&$number>0?query('SELECT * FROM matches WHERE event_id=? AND stage=? AND match_number=?',[$e['id'],$stage,$number])->fetch(PDO::FETCH_ASSOC):false;
  if(!$match){http_response_code(404);exit('Match not found');}
  $slots=query('SELECT s.id,s.position,s.team_number,s.status,t.name,p.data AS pit_data,ph.uploaded_at,sc.data AS report_data,sc.status AS report_status FROM slots s LEFT JOIN teams t ON t.event_id=? AND t.number=s.team_number LEFT JOIN pit p ON p.event_id=? AND p.team_number=s.team_number LEFT JOIN team_photos ph ON ph.event_id=? AND ph.team_number=s.team_number LEFT JOIN scouting sc ON sc.slot_id=s.id WHERE s.match_id=?',[$e['id'],$e['id'],$e['id'],$match['id']])->fetchAll(PDO::FETCH_ASSOC);
+ $official=json_decode($match['official_result']??'{}',true)?:[];
  $byPosition=[];foreach($slots as $slot)$byPosition[$slot['position']]=$slot;
  $reports=query('SELECT s.team_number,sc.data FROM scouting sc JOIN slots s ON s.id=sc.slot_id JOIN matches m ON m.id=s.match_id WHERE m.event_id=? AND sc.status=\'submitted\' ',[$e['id']])->fetchAll(PDO::FETCH_ASSOC);
  $byTeam=[];foreach($reports as $report)$byTeam[$report['team_number']][]=json_decode($report['data'],true)?:[];
@@ -543,6 +576,7 @@ elseif($p==='match'){
  echo '<div class="match-alliances">';
  foreach(['R'=>'Red','B'=>'Blue'] as $initial=>$name){
   $alliance=$initial==='R'?'red':'blue';echo '<section class="match-alliance '.h($alliance).'"><h2 class="match-alliance-header"><span class="match-alliance-name">'.h($name).' Alliance</span><span class="match-header-summary"><span class="match-header-score">Predicted Overall Score: <strong>'.h($predicted[$initial]===null?'—':number_format($predicted[$initial],1)).'</strong></span>';
+  if(isset($official[$alliance.'_score']))echo '<span class="official-alliance-score">Official Score: <strong>'.h($official[$alliance.'_score']).'</strong></span>';
   if($winner===$initial)echo '<span class="predicted-winner">Predicted Winner</span>';
   echo '</span></h2>';
   for($i=1;$i<=3;$i++){
