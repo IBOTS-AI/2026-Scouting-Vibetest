@@ -92,3 +92,5 @@ header{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align
 .highlighted-team{background:#ffd6a3;color:#713600;border-color:#e49a43}.dark-mode .highlighted-team{background:#ffbd73;color:#572800;border-color:#ea9840}.match-section .slot-line .scout-button{position:relative;left:-6px}.match-section .match-table th,.match-section .match-table td{padding-top:calc(.24rem + 1px);padding-bottom:calc(.24rem + 1px)}.match-section .match-table .match-row-spacer td{padding:0}
 
 .first-match-card .first-alliance{padding-top:5px;padding-bottom:5px}.first-match-card .first-match-header{padding-top:3px;padding-bottom:3px}
+
+.first-match-card{grid-template-rows:24px 42px 42px 21px;height:133px;min-height:133px}.first-match-card .first-alliance{height:42px;padding-top:7px;padding-bottom:7px}
