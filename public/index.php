@@ -117,7 +117,52 @@ function savePlayoffs(string $eventId,array $playoffs): int {
  foreach($playoffs as $number=>$row)query("INSERT INTO matches(id,event_id,stage,match_number,label,video_url,official_result) VALUES(?,?,'elimination',?,?,?,?) ON CONFLICT(event_id,stage,match_number) DO UPDATE SET label=EXCLUDED.label,video_url=EXCLUDED.video_url,official_result=EXCLUDED.official_result",[uuid(),$eventId,$number,$row['label'],$row['video_url'],json_encode($row,JSON_THROW_ON_ERROR)]);
  return $protected;
 }
+function renderFirstStyleBracket(array $rows): void {
+ // FIRST's eight-alliance layout: upper bracket at the top, lower bracket below.
+ $matches=[];$finals=[];
+ foreach($rows as $row){if(stripos($row['label']??'','Final')!==false)$finals[]=$row;else $matches[(int)$row['match_number']]=$row;}
+ $layout=[1=>[0,100],2=>[0,300],3=>[0,500],4=>[0,700],7=>[1,200],8=>[1,600],5=>[1,850],6=>[1,1050],10=>[2,850],9=>[2,1050],11=>[3,400],12=>[3,950],13=>[4,900]];
+ $origins=[5=>'Loser M1 · Loser M2',6=>'Loser M3 · Loser M4',7=>'Winner M1 · Winner M2',8=>'Winner M3 · Winner M4',9=>'Loser M7 · Winner M6',10=>'Loser M8 · Winner M5',11=>'Winner M7 · Winner M8',12=>'Winner M10 · Winner M9',13=>'Loser M11 · Winner M12'];
+ $paths=[
+  'M200 100 H230 V300 H200','M230 200 H260',
+  'M200 500 H230 V700 H200','M230 600 H260',
+  'M460 200 H490 V600 H460','M490 400 H780',
+  'M460 850 H520','M460 1050 H520',
+  'M720 850 H750 V1050 H720','M750 950 H780',
+  'M980 950 H1010 V900 H1040',
+  'M980 400 H1270 V900 H1240','M1270 650 H1300'
+ ];
+ echo '<div class="playoff-bracket first-style-bracket" aria-label="Playoff bracket"><div class="first-bracket-board"><svg class="first-bracket-lines" width="1500" height="1160" viewBox="0 0 1500 1160" aria-hidden="true" focusable="false">';
+ foreach($paths as $path)echo '<path d="'.h($path).'" fill="none" stroke="#9aa3ad" stroke-width="2" stroke-linejoin="round"/>';
+ echo '</svg>';
+ foreach(['Round 1','Round 2','Round 3','Round 4','Round 5','Finals'] as $i=>$title)echo '<h3 class="first-round-title" style="left:'.h($i*260).'px">'.h($title).'</h3>';
+ foreach($layout as $number=>[$column,$center]){
+  $match=$matches[$number]??null;$data=$match?json_decode($match['official_result']??'{}',true):[];$data=$data?:[];
+  $round=[1=>1,2=>1,3=>1,4=>1,5=>2,6=>2,7=>2,8=>2,9=>3,10=>3,11=>4,12=>4,13=>5][$number];
+  $label=$match?matchLabel($match):'Match '.$number.' (R'.$round.')';
+  echo '<article class="first-match-card" data-match="'.h($number).'" style="left:'.h($column*260).'px;top:'.h($center-75).'px"><div class="first-match-header">';
+  if($match)echo '<a href="/?p=match&stage=elimination&n='.h($number).'">'.h($label).'</a>';else echo '<strong>'.h($label).'</strong>';
+  if($match&&$match['video_url'])echo '<a class="video-link" href="'.h($match['video_url']).'" target="_blank" rel="noopener noreferrer" title="Watch match video" aria-label="Watch '.h($label).' video">▶</a>';
+  echo '</div>';
+  $six=$data['teams']??[];
+  if(!$six&&$match){$slots=query('SELECT position,team_number FROM slots WHERE match_id=?',[$match['id']])->fetchAll(PDO::FETCH_KEY_PAIR);foreach(['R1','R2','R3','B1','B2','B3'] as $pos)$six[]=$slots[$pos]??0;}
+  foreach(['red','blue'] as $i=>$color){$alliance=$data[$color.'_alliance']??null;$score=$data[$color.'_score']??null;
+   echo '<div class="first-alliance '.$color.'"><div><strong>'.($alliance?'Alliance '.h($alliance):'TBD').'</strong><div class="first-team-links">';
+   foreach(array_filter(array_slice($six,$i*3,3)) as $team)echo '<a href="/?p=team&n='.h($team).'">'.teamNumber($team).'</a>';
+   echo '</div></div><strong>'.($score===null?'—':h($score)).'</strong></div>';
+  }
+  if(isset($origins[$number]))echo '<small class="first-match-source">'.h($origins[$number]).'</small>';
+  echo '</article>';
+ }
+ echo '<article class="first-finals-card" style="left:1300px;top:520px"><h3>FINALS</h3>';
+ $allianceNumbers=[];$wins=[];
+ foreach($finals as $final){$data=json_decode($final['official_result']??'{}',true)?:[];foreach(['red','blue'] as $color){$alliance=$data[$color.'_alliance']??null;if($alliance&&!in_array($alliance,$allianceNumbers,true))$allianceNumbers[]=$alliance;}if(isset($data['red_score'],$data['blue_score'])&&$data['red_score']!==$data['blue_score']){$winner=$data[$data['red_score']>$data['blue_score']?'red_alliance':'blue_alliance']??null;if($winner)$wins[$winner]=($wins[$winner]??0)+1;}}
+ for($i=0;$i<2;$i++){$alliance=$allianceNumbers[$i]??null;echo '<div class="first-alliance '.($i?'blue':'red').'"><strong>'.($alliance?'Alliance '.h($alliance):'TBD').'</strong><strong>'.($alliance?h($wins[$alliance]??0):'—').'</strong></div>';}
+ foreach($finals as $final){$data=json_decode($final['official_result']??'{}',true)?:[];echo '<div class="first-final-result"><a href="/?p=match&stage=elimination&n='.h($final['match_number']).'">'.h(matchLabel($final)).'</a><span>'.h($data['red_score']??'—').'–'.h($data['blue_score']??'—').'</span>';if($final['video_url'])echo '<a class="video-link" href="'.h($final['video_url']).'" target="_blank" rel="noopener noreferrer" aria-label="Watch '.h(matchLabel($final)).' video">▶</a>';echo '</div>';}
+ echo '<small class="first-match-source">Winner M11 · Winner M13</small></article></div></div>';
+}
 function renderPlayoffBracket(array $rows): void {
+ foreach($rows as $row)if((int)$row['match_number']===4&&preg_match('/^Match 4 \(R1\)$/',$row['label']??'')){renderFirstStyleBracket($rows);return;}
  $rounds=[];$sources=[];
  foreach($rows as $row)if((int)$row['match_number']===4&&preg_match('/^Match 4 \(R1\)$/',$row['label']??'')){
   $sources=[5=>'Loser M1 · Loser M2',6=>'Loser M3 · Loser M4',7=>'Winner M1 · Winner M2',8=>'Winner M3 · Winner M4',9=>'Loser M7 · Winner M6',10=>'Loser M8 · Winner M5',11=>'Winner M7 · Winner M8',12=>'Winner M10 · Winner M9',13=>'Loser M11 · Winner M12'];break;
