@@ -2,6 +2,7 @@
 declare(strict_types=1);
 session_start();
 require_once __DIR__.'/team-charts.php';
+require_once __DIR__.'/database-backup.php';
 function db(): PDO { static $db; if (!$db) { $db = new PDO(getenv('DATABASE_URL'), getenv('DB_USER'), getenv('DB_PASSWORD'), [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]); $db->exec(file_get_contents('/var/www/sql/schema.sql')); if (!(int)$db->query('SELECT count(*) FROM users')->fetchColumn()) { $q=$db->prepare('INSERT INTO users(id,name,password_hash,role) VALUES(?,?,?,?)');$q->execute([uuid(),'admin',password_hash('change-me-now',PASSWORD_DEFAULT),'admin']); } } return $db; }
 function uuid(): string { $x=bin2hex(random_bytes(16));return substr($x,0,8).'-'.substr($x,8,4).'-4'.substr($x,13,3).'-'.dechex((hexdec($x[16])&3)|8).substr($x,17,3).'-'.substr($x,20); }
 function query(string $sql,array $args=[]): PDOStatement { $q=db()->prepare($sql);$q->execute($args);return $q; }
@@ -364,6 +365,22 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
  if($p==='login') { $u=query('SELECT * FROM users WHERE name=?',[trim($_POST['name']??'')])->fetch(PDO::FETCH_ASSOC);if($u&&password_verify($_POST['password']??'',$u['password_hash'])) {session_regenerate_id(true);$_SESSION['user']=['id'=>$u['id'],'name'=>$u['name'],'role'=>$u['role'],'position'=>$u['position']];$_SESSION['csrf']=bin2hex(random_bytes(16));go('home');} $_SESSION['flash']='Invalid login';go('login'); }
  if(!isset($_SESSION['user']) || !hash_equals($_SESSION['csrf']??'',$_POST['csrf']??'')){http_response_code(403);exit('Invalid session');}
  $e=event();$uid=$_SESSION['user']['id'];
+ if(in_array($p,['backup_database','restore_database'],true)){
+  if(!role('admin')){http_response_code(403);exit('Admins only');}
+  ini_set('memory_limit','768M');set_time_limit(180);
+  try {
+   if($p==='backup_database'){
+    $json=createDatabaseBackup(db());
+    header('Content-Type: application/json; charset=utf-8');header('Content-Disposition: attachment; filename="scouting-backup-'.gmdate('Y-m-d-His').'.json"');header('Cache-Control: no-store');header('X-Content-Type-Options: nosniff');echo $json;exit;
+   }
+   if(($_POST['confirm_restore']??'')!=='RESTORE')throw new RuntimeException('Type RESTORE to confirm replacing the entire database.');
+   $file=$_FILES['database_backup']??null;
+   if(!$file||$file['error']!==UPLOAD_ERR_OK||$file['size']<1||$file['size']>256*1024*1024||!is_uploaded_file($file['tmp_name']))throw new RuntimeException('Choose a JSON backup file up to 256 MB.');
+   restoreDatabaseBackup(db(),file_get_contents($file['tmp_name']));
+   $_SESSION=[];session_regenerate_id(true);$_SESSION['flash']='Database restored. Sign in using an account from the backup.';go('login');
+  }catch(Throwable $ex){error_log('Database backup/restore: '.$ex->getMessage());$_SESSION['flash']=$ex instanceof PDOException?'Database operation failed. No changes were saved. Check the server log.':$ex->getMessage();$_SESSION['flash_type']='warn';go('admin#backup-restore');}
+ }
+
  if($p==='event'&&role('admin')) { $year=(int)($_POST['year']??0);$code=strtoupper(trim($_POST['event_code']??''));$selected=query('SELECT * FROM event_catalog WHERE year=? AND code=?',[$year,$code])->fetch(PDO::FETCH_ASSOC);if(!$selected){http_response_code(400);exit('Choose an event from the list');}[$teams,$matches,$teamPage,$schedulePage,$videos,$playoffs,$playoffPage,$results]=officialData($year,$code);db()->beginTransaction();try{query('UPDATE events SET active=false');$id=query('INSERT INTO events(id,name,event_key,active) VALUES(?,?,?,true) ON CONFLICT(event_key) DO UPDATE SET name=EXCLUDED.name,active=true RETURNING id',[uuid(),$selected['name'],(string)$year.strtolower($code)])->fetchColumn();$protected=saveOfficialData($id,$teams,$matches,$schedulePage?$videos:null);saveMatchResults($id,'qualification',$results);if($playoffPage)$protected+=savePlayoffs($id,$playoffs);db()->commit();}catch(Throwable $ex){db()->rollBack();throw $ex;}$_SESSION['flash_type']='success';$_SESSION['flash']='Selected event: '.$selected['name'].': imported '.count($teams).' teams and '.count($matches).' qualification matches and '.count($playoffs).' elimination matches.'.(!$teamPage||!$schedulePage?' Some official pages were unavailable; use Refresh official data later.':'').($protected?' '.$protected.' scouted positions kept their prior team assignments.':'');go('admin');}
  if($p==='refresh_event'&&role('admin')&&$e&&preg_match('/^(\d{4})([a-z0-9]+)$/',$e['event_key']??'',$parts)){[$teams,$matches,$teamPage,$schedulePage,$videos,$playoffs,$playoffPage,$results]=officialData((int)$parts[1],strtoupper($parts[2]));db()->beginTransaction();try{$protected=saveOfficialData($e['id'],$teams,$matches,$schedulePage?$videos:null);saveMatchResults($e['id'],'qualification',$results);if($playoffPage)$protected+=savePlayoffs($e['id'],$playoffs);db()->commit();}catch(Throwable $ex){db()->rollBack();throw $ex;}$_SESSION['flash']='Refreshed '.count($teams).' teams and '.count($matches).' qualification matches and '.count($playoffs).' elimination matches.'.(!$teamPage||!$schedulePage?' Some official pages were unavailable.':'').($protected?' '.$protected.' scouted positions retained.':'');go('admin');}
  if($p==='refresh_playoffs'){
@@ -547,7 +564,7 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
  }
  http_response_code(403);exit('Forbidden');
 }
-if(!isset($_SESSION['user'])) {echo '<!doctype html><html lang="en"'.(picked(siteSettings()['dark_mode'])?' class="dark-mode"':'').'><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h(siteSettings()['site_title']).' · Sign in</title><link rel="stylesheet" href="'.h(asset('style.css')).'"><main><h1>'.h(siteSettings()['site_title']).' sign in</h1><form method="post" action="/?p=login"><label>Username<input name="name" required autofocus></label><label>Password<input name="password" type="password" required></label><button>Sign in</button></form><p>First run: admin / change-me-now. Change this password before use.</p></main></html>';exit;}
+if(!isset($_SESSION['user'])) {if(isset($_SESSION['flash'])){$loginNotice='<aside class="notice">'.h($_SESSION['flash']).'</aside>';unset($_SESSION['flash'],$_SESSION['flash_type']);}else $loginNotice='';echo '<!doctype html><html lang="en"'.(picked(siteSettings()['dark_mode'])?' class="dark-mode"':'').'><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h(siteSettings()['site_title']).' · Sign in</title><link rel="stylesheet" href="'.h(asset('style.css')).'"><main><h1>'.h(siteSettings()['site_title']).' sign in</h1>'.$loginNotice.'<form method="post" action="/?p=login"><label>Username<input name="name" required autofocus></label><label>Password<input name="password" type="password" required></label><button>Sign in</button></form><p>First run: admin / change-me-now. Change this password before use.</p></main></html>';exit;}
 $e=event();
 if($p==='site_logo'){$logo=query('SELECT logo_mime,logo_base64 FROM site_settings WHERE id=1')->fetch(PDO::FETCH_ASSOC);if(!$logo||!$logo['logo_base64']){http_response_code(404);exit;}header('Content-Type: '.$logo['logo_mime']);header('X-Content-Type-Options: nosniff');header('Cache-Control: private, no-cache');echo base64_decode($logo['logo_base64']);exit;}
 if($p==='field_image'){$image=$e?query('SELECT mime,photo_base64 FROM event_field_images WHERE event_id=?',[$e['id']])->fetch(PDO::FETCH_ASSOC):false;if(!$image){http_response_code(404);exit;}header('Content-Type: '.$image['mime']);header('X-Content-Type-Options: nosniff');header('Cache-Control: private, no-cache');echo base64_decode($image['photo_base64']);exit;}
