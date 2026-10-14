@@ -19,6 +19,8 @@ $files = @(
     'public/team-charts.php',
     'public/admin-page.php',
     'public/database-backup.php',
+    'public/pit-display.php',
+    'public/pit-display.js',
     'public/navigation.js',
     'public/style.css',
     'public/dashboard.js',
@@ -56,6 +58,8 @@ $checks = @{
     'public/team-charts.php' = '/var/www/html/team-charts.php'
     'public/admin-page.php' = '/var/www/html/admin-page.php'
     'public/database-backup.php' = '/var/www/html/database-backup.php'
+    'public/pit-display.php' = '/var/www/html/pit-display.php'
+    'public/pit-display.js' = '/var/www/html/pit-display.js'
     'public/navigation.js' = '/var/www/html/navigation.js'
     'public/style.css' = '/var/www/html/style.css'
     'public/dashboard.js' = '/var/www/html/dashboard.js'
