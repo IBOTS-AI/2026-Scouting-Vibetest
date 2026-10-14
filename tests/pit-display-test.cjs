@@ -1,0 +1,16 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const make=extra=>Object.assign({value:'',listeners:{},addEventListener(k,f){this.listeners[k]=f;},setAttribute(){},validity:{valid:true}},extra);
+const rows=[{dataset:{number:'2370',name:'iBots',matchScore:'100',autoScore:'0',teleopScore:'100',endgameScore:''}},{dataset:{number:'97',name:'Bionics',matchScore:'200',autoScore:'50',teleopScore:'150',endgameScore:'20'}},{dataset:{number:'190',name:'Gompei',matchScore:'',autoScore:'',teleopScore:'',endgameScore:''}}];
+const body={rows,order:[],append(r){this.order=this.order.filter(x=>x!==r);this.order.push(r);}};
+const ids={pitDisplayTable:{tBodies:[body]},pitDisplaySort:make({value:'number'}),pitDisplayDirection:make(),pitDisplayName:make(),pitDisplayReset:make(),pitDisplayStatus:{}};
+const filters=['number','match_score','auto_score','teleop_score','endgame_score'].flatMap(field=>['min','max'].map(bound=>make({dataset:{filter:field,bound}})));
+vm.runInNewContext(fs.readFileSync('public/pit-display.js','utf8'),{document:{getElementById:id=>ids[id],querySelectorAll:()=>filters}});
+assert.deepEqual(body.order.map(r=>r.dataset.number),['97','190','2370']);
+ids.pitDisplaySort.value='match_score';ids.pitDisplaySort.listeners.change();ids.pitDisplayDirection.listeners.click();
+assert.deepEqual(body.order.map(r=>r.dataset.number),['97','2370','190']);
+const auto=filters.find(f=>f.dataset.filter==='auto_score'&&f.dataset.bound==='max');auto.value='0';auto.listeners.input();assert.equal(rows.filter(r=>!r.hidden).length,1);assert.equal(rows[0].hidden,false);
+ids.pitDisplayReset.listeners.click();
+const endgame=filters.find(f=>f.dataset.filter==='endgame_score'&&f.dataset.bound==='min');endgame.value='10';endgame.listeners.input();assert.equal(rows.filter(r=>!r.hidden).length,1);assert.equal(rows[1].hidden,false);
+ids.pitDisplayReset.listeners.click();ids.pitDisplayName.value='IBOTS';ids.pitDisplayName.listeners.input();assert.equal(rows.filter(r=>!r.hidden).length,1);
+ids.pitDisplayReset.listeners.click();assert.equal(rows.filter(r=>!r.hidden).length,3);
+console.log('Passed: numeric ordering, descending scores, missing last, zero filter, endgame filter, case-insensitive names, reset.');
