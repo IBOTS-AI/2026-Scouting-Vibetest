@@ -32,5 +32,8 @@ $db->tables['scouting']=[];restoreDatabaseBackup($db,$json);check(json_encode($d
 foreach(['invalid-json',str_replace('ibots-scouting-database','other-app',$json)] as $bad){try{restoreDatabaseBackup($db,$bad);throw new LogicException('Accepted invalid backup');}catch(JsonException|RuntimeException $e){}check(json_encode($db->tables)===$original,'Invalid backup leaves data unchanged');}
 $bad=json_decode($json);unset($bad->tables->users);try{restoreDatabaseBackup($db,json_encode($bad));throw new LogicException('Accepted missing table');}catch(RuntimeException $e){}
 $bad=json_decode($json);$bad->tables->users->rows=[];try{restoreDatabaseBackup($db,json_encode($bad));throw new LogicException('Accepted no admin');}catch(RuntimeException $e){}
+$legacy=json_decode($json);unset($legacy->tables->batteries,$legacy->tables->battery_checks);
+$validated=validateDatabaseBackup(json_encode($legacy),$db->columns);check($validated->tables->batteries->rows===[]&&$validated->tables->battery_checks->rows===[],'Pre-battery backup gains empty inventory tables');
+$partial=json_decode($json);unset($partial->tables->batteries);try{validateDatabaseBackup(json_encode($partial),$db->columns);throw new LogicException('Accepted partially missing battery tables');}catch(RuntimeException $e){}
 $db->fail=true;try{restoreDatabaseBackup($db,$json);throw new LogicException('Expected insert failure');}catch(RuntimeException $e){}check(json_encode($db->tables)===$original&&!$db->inTransaction(),'Insert failure rolls back all deletes/inserts');
 echo "Passed: readable backup, full round trip, invalid/missing tables, no admin, transactional rollback.\n";

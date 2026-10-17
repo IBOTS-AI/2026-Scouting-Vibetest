@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 // Parent tables precede their dependents; restore never executes SQL from a file.
 function backupTables(): array {
- return ['users','events','teams','matches','slots','scouting','pit','audit','picklist','event_catalog','districts','district_events','team_photos','event_field_images','strategy_plans','site_settings'];
+ return ['users','events','teams','matches','slots','scouting','pit','audit','picklist','event_catalog','districts','district_events','team_photos','event_field_images','strategy_plans','site_settings','batteries','battery_checks'];
 }
 function backupColumns(PDO $db): array {
  $columns=[];
@@ -31,6 +31,8 @@ function validateDatabaseBackup(string $json,array $columns): stdClass {
  $backup=json_decode($json,false,512,JSON_THROW_ON_ERROR);
  if(!$backup instanceof stdClass||($backup->format??null)!=='ibots-scouting-database'||($backup->version??null)!==1||!($backup->tables??null) instanceof stdClass)throw new RuntimeException('Choose a JSON database backup downloaded from this app.');
  $names=array_keys(get_object_vars($backup->tables));$expected=backupTables();sort($names);sort($expected);
+ $legacy=array_values(array_diff($expected,['batteries','battery_checks']));sort($legacy);
+ if($names===$legacy){foreach(['batteries','battery_checks'] as $table)$backup->tables->$table=(object)['columns'=>(object)$columns[$table],'rows'=>[]];$names=$expected;}
  if($names!==$expected)throw new RuntimeException('The backup is missing tables or belongs to a different app version.');
  foreach(backupTables() as $table){
   $data=$backup->tables->$table;

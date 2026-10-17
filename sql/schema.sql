@@ -33,3 +33,19 @@ ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS highlighted_team integer NOT 
 INSERT INTO site_settings(id) VALUES(1) ON CONFLICT DO NOTHING;
 
 ALTER TABLE event_catalog ADD COLUMN IF NOT EXISTS offseason boolean NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS batteries (
+ id uuid PRIMARY KEY, label text NOT NULL, brand text NOT NULL DEFAULT '', model text NOT NULL DEFAULT '', serial_number text NOT NULL DEFAULT '',
+ purchased_on date, in_service_on date, rated_ah numeric(7,2) CHECK(rated_ah>0 AND rated_ah<=1000), notes text NOT NULL DEFAULT '',
+ status text NOT NULL DEFAULT 'active' CHECK(status IN ('active','retired')), retired_at timestamptz, retirement_note text NOT NULL DEFAULT '',
+ created_by uuid REFERENCES users(id), created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS battery_label_unique ON batteries(lower(label));
+CREATE TABLE IF NOT EXISTS battery_checks (
+ id uuid PRIMARY KEY, battery_id uuid NOT NULL REFERENCES batteries(id), recorded_on date NOT NULL,
+ check_type text NOT NULL CHECK(check_type IN ('Inspection','Load test','Capacity test','Robot use','Charging','Other')),
+ condition text NOT NULL CHECK(condition IN ('Not assessed','OK','Monitor','Needs attention')),
+ event_id uuid REFERENCES events(id) ON DELETE SET NULL, match_ref text NOT NULL DEFAULT '', readings jsonb NOT NULL DEFAULT '{}' CHECK(jsonb_typeof(readings)='object'), notes text NOT NULL DEFAULT '',
+ recorded_by uuid NOT NULL REFERENCES users(id), created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS battery_checks_history ON battery_checks(battery_id,recorded_on DESC,created_at DESC);
