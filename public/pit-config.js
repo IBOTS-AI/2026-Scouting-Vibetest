@@ -23,12 +23,12 @@
       if (!add) return;
       const field = add.closest('.config-field');
       const group = field.querySelector('.config-options');
-      if (group.children.length >= 30) { alert('Each dropdown supports up to 30 choices.'); return; }
+      if (group.children.length >= 50) { alert('Each dropdown supports up to 50 choices.'); return; }
       const row = document.createElement('div'); row.className = 'config-option';
       const label = document.createElement('label');
       const name = document.createElement('input');
       name.name = `choices[${field.dataset.key}][]`; name.required = true;
-      name.maxLength = field.dataset.key === 'tags' ? 40 : 80;
+      name.maxLength = 80;
       name.placeholder = field.dataset.key === 'tags' ? 'Tag text' : 'Choice text';
       label.append(name); row.append(label);
       if (field.dataset.key === 'tags') {

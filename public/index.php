@@ -3,6 +3,7 @@ declare(strict_types=1);
 session_start();
 require_once __DIR__.'/team-charts.php';
 require_once __DIR__.'/database-backup.php';
+require_once __DIR__.'/pit-fields.php';
 function db(): PDO { static $db; if (!$db) { $db = new PDO(getenv('DATABASE_URL'), getenv('DB_USER'), getenv('DB_PASSWORD'), [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]); $db->exec(file_get_contents('/var/www/sql/schema.sql')); if (!(int)$db->query('SELECT count(*) FROM users')->fetchColumn()) { $q=$db->prepare('INSERT INTO users(id,name,password_hash,role) VALUES(?,?,?,?)');$q->execute([uuid(),'admin',password_hash('change-me-now',PASSWORD_DEFAULT),'admin']); } } return $db; }
 function uuid(): string { $x=bin2hex(random_bytes(16));return substr($x,0,8).'-'.substr($x,8,4).'-4'.substr($x,13,3).'-'.dechex((hexdec($x[16])&3)|8).substr($x,17,3).'-'.substr($x,20); }
 function query(string $sql,array $args=[]): PDOStatement { $q=db()->prepare($sql);$q->execute($args);return $q; }
@@ -259,10 +260,11 @@ function metricAverage(array $reports,string $key,?float $max=null): ?float { $v
 function picked($value): bool { return in_array($value,[true,'t','1',1],true); }
 function pickBuckets(): array { return ['S+','A','B','C','DNP']; }
 function pickRows(string $eventId): array { return query('SELECT t.number,t.name,ph.uploaded_at,p.rank,p.note,p.do_not_pick,p.picked,p.bucket,pit.data AS pit_data FROM teams t LEFT JOIN picklist p ON p.event_id=t.event_id AND p.team_number=t.number LEFT JOIN pit ON pit.event_id=t.event_id AND pit.team_number=t.number LEFT JOIN team_photos ph ON ph.event_id=t.event_id AND ph.team_number=t.number WHERE t.event_id=? ORDER BY COALESCE(p.rank,1000000+t.number),t.number',[$eventId])->fetchAll(PDO::FETCH_ASSOC); }
-function robotMeta(array $data): string { $type=$data['robot_meta']??'';return $type==='Other'?trim((string)($data['robot_meta_other']??'')):$type; }
+function robotMeta(array $data): string { $type=$data['robot_meta']??'';return $type==='Other'?(is_string($data['robot_meta_other']??null)?trim($data['robot_meta_other']):''):(is_scalar($type)?(string)$type:''); }
 function pitTags(array $data): array {
- $tags=[];foreach((is_array($data['tags']??null)?$data['tags']:[]) as $tag)if(is_string($tag)&&trim($tag)!==''){$tag=trim($tag);if(strlen($tag)<=40&&!in_array(strtolower($tag),array_map('strtolower',$tags),true))$tags[]=$tag;}
- return array_slice($tags,0,12);
+ $keys=['tags'];foreach(pitFields() as $field)if($field['type']==='tags')$keys[]=$field['id'];
+ $tags=[];foreach(array_unique($keys) as $key)foreach((is_array($data[$key]??null)?$data[$key]:[]) as $tag)if(is_string($tag)&&trim($tag)!==''){$tag=trim($tag);if(strlen($tag)<=80&&!in_array(strtolower($tag),array_map('strtolower',$tags),true))$tags[]=$tag;}
+ return array_slice($tags,0,50);
 }
 function pitChoiceFields(): array {return ['robot_meta'=>['Robot Meta',['Big Dumper','Turret','Other']],'intake'=>['Intake',['Ground intake','Source intake','Dual intake','None']],'shooter_type'=>['Shooter Type',['Turret','Fixed','Hooded','Flywheel','None']],'tags'=>['Tag Management',['Defense','Passing','L3 Climber','Offense']],'driver_experience'=>['Driver Experience Level',['New','Developing','Experienced','Veteran']],'human_player_experience'=>['Human Player Experience Level',['New','Developing','Experienced','Veteran']]];}
 function pitChoices(): array {
@@ -454,6 +456,19 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
   query('UPDATE site_settings SET dark_mode=? WHERE id=1',[$enabled?'true':'false']);
   $_SESSION['flash_type']='success';$_SESSION['flash']='Dark Mode '.($enabled?'enabled.':'disabled.');go('admin');
  }
+ if($p==='pit_fields'){
+  if(!role('admin')){http_response_code(403);exit('Admins only');}
+  try{
+   db()->beginTransaction();query('SELECT id FROM site_settings WHERE id=1 FOR UPDATE');
+   $existing=pitFields();
+   if(($_POST['schema_version']??'')!==pitFieldVersion($existing))throw new InvalidArgumentException('The field configuration changed. Reload Admin before editing again.');
+   $fields=validatePitFields(json_decode((string)($_POST['field_schema']??''),true,512,JSON_THROW_ON_ERROR),$existing);
+   $extra=[];foreach($fields as $f)if($f['id']==='tags'&&$f['type']==='tags')$extra['tags']=$f['options'];
+   query("UPDATE site_settings SET pit_choices=jsonb_set(pit_choices,'{fields}',?::jsonb,true) || ?::jsonb WHERE id=1",[json_encode($fields,JSON_THROW_ON_ERROR),json_encode((object)$extra,JSON_THROW_ON_ERROR)]);
+   db()->commit();$_SESSION['flash_type']='success';$_SESSION['flash']='Pit fields saved in the selected order. Existing records retained.';
+  }catch(InvalidArgumentException|JsonException $ex){if(db()->inTransaction())db()->rollBack();$_SESSION['flash']=$ex->getMessage();}
+  go('admin#pit-choices');
+ }
  if($p==='pit_choices'&&role('admin')){
   $submitted=$_POST['choices']??[];$old=pitChoices();$choices=$old;$colors=pitTagColors();
   $scope=$_POST['scope']??'all';if(!in_array($scope,['all','pit','tags'],true)){http_response_code(400);exit('Invalid configuration section');}
@@ -461,17 +476,19 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
   if(!is_array($submitted)){http_response_code(400);exit('Invalid pit choices');}
   foreach($fields as $key=>[$label]){
    $raw=$submitted[$key]??null;
-   if(!is_array($raw)||count($raw)>30){http_response_code(400);exit('Invalid choices for '.$label);}
+   if(!is_array($raw)||count($raw)>50){http_response_code(400);exit('Invalid choices for '.$label);}
    $values=[];$seen=[];
-   foreach($raw as $i=>$line){if(!is_string($line)){http_response_code(400);exit('Invalid choice');}$value=trim($line);if($value==='')continue;$lower=strtolower($value);if(strlen($value)>($key==='tags'?40:80)||!preg_match('//u',$value)||preg_match('/[\x00-\x1f\x7f]/',$value)){http_response_code(400);exit('Choice too long or invalid for '.$label);}if(isset($seen[$lower])){http_response_code(400);exit('Duplicate choice for '.$label.': '.$value);}$seen[$lower]=true;$values[]=$value;
+   foreach($raw as $i=>$line){if(!is_string($line)){http_response_code(400);exit('Invalid choice');}$value=trim($line);if($value==='')continue;$lower=strtolower($value);if(strlen($value)>80||!preg_match('//u',$value)||preg_match('/[\x00-\x1f\x7f]/',$value)){http_response_code(400);exit('Choice too long or invalid for '.$label);}if(isset($seen[$lower])){http_response_code(400);exit('Duplicate choice for '.$label.': '.$value);}$seen[$lower]=true;$values[]=$value;
     if($key==='tags'){$color=$_POST['tag_colors'][$i]??null;if(!is_string($color)||!preg_match('/^#[0-9a-fA-F]{6}$/',$color)){http_response_code(400);exit('Choose a valid tag color');}$colors[$value]=$color;}
    }
-   if(!$values||count($values)>30){http_response_code(400);exit('Enter 1 to 30 choices for '.$label);}
+   if(!$values||count($values)>50){http_response_code(400);exit('Enter 1 to 50 choices for '.$label);}
    $choices[$key]=$values;
   }
   $removed=[];foreach(pitChoiceFields() as $key=>[$label])foreach(array_diff($old[$key],$choices[$key]) as $value){[$pitCount,$matchCount]=pitChoiceUsage($key,$value);if($pitCount+$matchCount)$removed[]=$label.' “'.$value.'” ('.$pitCount.' pit records, '.$matchCount.' match reports)';}
   if($removed&&($_POST['acknowledge_removal']??'')!=='1'){http_response_code(409);exit('Confirm removal of choices in use. Existing records will be retained: '.implode('; ',$removed));}
-  $choices['tag_colors']=$colors;
+   $savedConfig=pitFieldConfig();
+  if(isset($savedConfig['fields']))foreach($savedConfig['fields'] as &$configuredField)if($configuredField['id']==='tags'&&$configuredField['type']==='tags')$configuredField['options']=$choices['tags'];unset($configuredField);
+  $choices=array_merge($savedConfig,$choices);$choices['tag_colors']=$colors;
   query('UPDATE site_settings SET pit_choices=? WHERE id=1',[json_encode($choices,JSON_THROW_ON_ERROR)]);
   $_SESSION['flash_type']='success';$_SESSION['flash']=($scope==='tags'?'Tag Management':'Pit Scouting Configuration').' updated. Existing scouting records were not changed.';go($scope==='tags'?'admin#tag-management':'admin#pit-choices');
  }
@@ -533,28 +550,29 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
  }
  if($p==='upload_photo'&&$e) { $num=(int)($_POST['team']??0);$team=query('SELECT number FROM teams WHERE event_id=? AND number=?',[$e['id'],$num])->fetch(PDO::FETCH_ASSOC);if(!$team){http_response_code(404);exit('Team not found');}$upload=$_FILES['photo']??null;if(!$upload||$upload['error']!==UPLOAD_ERR_OK||$upload['size']>4*1024*1024||$upload['size']<1||!is_uploaded_file($upload['tmp_name'])){$_SESSION['flash']='Choose a JPEG, PNG, or WebP photo under 4 MB.';go('pit&n='.$num);} $details=@getimagesize($upload['tmp_name']);$mime=$details['mime']??'';if(!in_array($mime,['image/jpeg','image/png','image/webp'],true)){$_SESSION['flash']='This image format is not supported. Choose JPEG, PNG, or WebP.';go('pit&n='.$num);} $data=base64_encode(file_get_contents($upload['tmp_name']));query('INSERT INTO team_photos(event_id,team_number,mime,photo_base64) VALUES(?,?,?,?) ON CONFLICT(event_id,team_number) DO UPDATE SET mime=EXCLUDED.mime,photo_base64=EXCLUDED.photo_base64,uploaded_at=now()',[$e['id'],$num,$mime,$data]);$_SESSION['flash']='Robot photo saved.';go('pit&n='.$num);}
  if($p==='pit'&&$e) {
-  $num=(int)($_POST['team']??0);if($num<1)exit('Invalid team');
-  $old=query('SELECT * FROM pit WHERE event_id=? AND team_number=?',[$e['id'],$num])->fetch(PDO::FETCH_ASSOC);
-  $previous=json_decode($old['data']??'{}',true)?:[];$choices=pitChoices();
-  $meta=$_POST['robot_meta']??'';$custom=trim((string)($_POST['robot_meta_other']??''));
-  if(!is_string($meta)||!in_array($meta,array_merge([''],pitChoicesWithSaved($choices,'robot_meta',(string)($previous['robot_meta']??''))),true)||($meta==='Other'&&($custom===''||strlen($custom)>80))){http_response_code(400);exit('Choose a valid Robot Meta option');}
-  $selected=$_POST['tags']??[];
-  if(!is_array($selected)||count($selected)>12){http_response_code(400);exit('Choose up to 12 tags');}
-  $allowedTags=array_merge($choices['tags'],pitTags($previous));
-  foreach($selected as $tag)if(!is_string($tag)||!in_array($tag,$allowedTags,true)||strlen($tag)>40){http_response_code(400);exit('Choose tags from the configured list');}
-  $tags=pitTags(['tags'=>$selected]);
-  $data=array_intersect_key($previous,array_flip(['robot','dimensions','weight','mechanisms','scoring']));
-  $data['robot_meta']=$meta;$data['robot_meta_other']=$meta==='Other'?$custom:'';$data['tags']=$tags;
-  foreach(['drivetrain','intake','shooter_type','width','length','height','weight_lbs','autonomous','endgame','strategy','reliability','requirements','notes'] as $k){
-   $value=$_POST[$k]??'';if(!is_string($value)){http_response_code(400);exit('Invalid pit field');}
-   $data[$k]=trim($value);
-   if(in_array($k,['drivetrain','intake','shooter_type','width','length','height','weight_lbs'],true)&&strlen($data[$k])>80){http_response_code(400);exit('Pit field is too long');}
-  }
-  foreach(['width','length','height','weight_lbs'] as $k)if($data[$k]!==''&&(!is_numeric($data[$k])||(float)$data[$k]<0)){http_response_code(400);exit('Dimensions and weight must be nonnegative numbers');}
-  foreach(['intake','shooter_type','driver_experience','human_player_experience'] as $k){$value=$data[$k]??($_POST[$k]??'');if(!is_string($value)||!in_array($value,array_merge([''],pitChoicesWithSaved($choices,$k,(string)($previous[$k]??''))),true)){http_response_code(400);exit('Choose a valid '.pitChoiceFields()[$k][0].' option');}$data[$k]=$value;}
-  query('INSERT INTO teams(event_id,number) VALUES(?,?) ON CONFLICT DO NOTHING',[$e['id'],$num]);$id=$old['id']??uuid();$encoded=json_encode($data,JSON_THROW_ON_ERROR);
-  query('INSERT INTO pit(id,event_id,team_number,author_id,data) VALUES(?,?,?,?,?) ON CONFLICT(event_id,team_number) DO UPDATE SET data=EXCLUDED.data,author_id=EXCLUDED.author_id,updated_at=now(),sync_state=\'pending\' ',[$id,$e['id'],$num,$uid,$encoded]);
-  query('INSERT INTO audit(id,record_type,record_id,actor_id,prior_data,new_data) VALUES(?,?,?,?,?,?)',[uuid(),'pit',$id,$uid,$old['data']??null,$encoded]);go('team&n='.$num);
+  $num=(int)($_POST['team']??0);
+  if(!query('SELECT number FROM teams WHERE event_id=? AND number=?',[$e['id'],$num])->fetchColumn()){http_response_code(404);exit('Team not found');}
+  try{
+   db()->beginTransaction();query('SELECT id FROM site_settings WHERE id=1 FOR SHARE');$fields=pitFields();
+   if(($_POST['schema_version']??'')!==pitFieldVersion($fields)){db()->rollBack();http_response_code(409);exit('Pit fields changed while this form was open. Reload the pit form before saving.');}
+   $old=query('SELECT * FROM pit WHERE event_id=? AND team_number=? FOR UPDATE',[$e['id'],$num])->fetch(PDO::FETCH_ASSOC);
+   $previous=json_decode($old['data']??'{}',true)?:[];
+   if(!is_array($_POST['fields']??[]))throw new InvalidArgumentException('Invalid pit fields.');
+   $data=readPitValues($fields,$_POST['fields']??[],$previous);
+   foreach($fields as $f)if($f['type']==='image'){
+    $key=$f['id'];$upload=$_FILES['image_'.$key]??null;$remove=isset($_POST['remove_images'][$key]);
+    if($upload&&($upload['error']??-1)!==UPLOAD_ERR_NO_FILE)$data[$key]=readPitImage($upload);
+    elseif($remove)unset($data[$key]);else continue;
+    if($key==='robot_photo'){
+     if(isset($data[$key]))query('INSERT INTO team_photos(event_id,team_number,mime,photo_base64) VALUES(?,?,?,?) ON CONFLICT(event_id,team_number) DO UPDATE SET mime=EXCLUDED.mime,photo_base64=EXCLUDED.photo_base64,uploaded_at=now()',[$e['id'],$num,$data[$key]['mime'],$data[$key]['base64']]);
+     else query('DELETE FROM team_photos WHERE event_id=? AND team_number=?',[$e['id'],$num]);
+     unset($data[$key]);
+    }
+   }
+   $id=$old['id']??uuid();$encoded=json_encode($data,JSON_THROW_ON_ERROR);
+   query('INSERT INTO pit(id,event_id,team_number,author_id,data) VALUES(?,?,?,?,?) ON CONFLICT(event_id,team_number) DO UPDATE SET data=EXCLUDED.data,author_id=EXCLUDED.author_id,updated_at=now(),sync_state=\'pending\' ',[$id,$e['id'],$num,$uid,$encoded]);
+   query('INSERT INTO audit(id,record_type,record_id,actor_id,prior_data,new_data) VALUES(?,?,?,?,?,?)',[uuid(),'pit',$id,$uid,$old['data']??null,$encoded]);db()->commit();go('team&n='.$num);
+  }catch(InvalidArgumentException $ex){if(db()->inTransaction())db()->rollBack();http_response_code(400);exit(h($ex->getMessage()).' Use Back to correct the form.');}
  }
  if(in_array($p,['pick_status','pick_order','pick_note','pick_dnp'],true)&&$e&&role('admin','mentor','drive')) {
   $rows=pickRows($e['id']);$numbers=array_map('intval',array_column($rows,'number'));
@@ -667,32 +685,11 @@ elseif($p==='team'||$p==='pit'){
  $photo=query('SELECT uploaded_at FROM team_photos WHERE event_id=? AND team_number=?',[$e['id'],$n])->fetch(PDO::FETCH_ASSOC);
  page('Team '.$n.' · '.($team['name']?:'Unnamed team'));
  if($p==='pit'){
-  echo '<section class="photo-widget"><h2>Robot photo</h2>';
-  if($photo)echo '<img class="pit-photo" src="/?p=robot_photo&n='.h($n).'&v='.rawurlencode($photo['uploaded_at']).'" alt="Robot photo for team '.h($n).'">';
-  else echo '<div class="pit-photo placeholder">Add a robot photo</div>';
-  echo '<form method="post" action="/?p=upload_photo" enctype="multipart/form-data">'.csrf().'<input type="hidden" name="team" value="'.h($n).'"><label>Choose robot photo<input type="file" name="photo" accept="image/jpeg,image/png,image/webp" required></label><button>Upload photo</button><small>JPEG, PNG, or WebP · up to 4 MB</small></form></section><h2>Pit scouting</h2><form method="post" action="/?p=pit">'.csrf().'<input type="hidden" name="team" value="'.h($n).'">';
-  $choices=pitChoices();$meta=(string)($d['robot_meta']??'');
-  echo '<label>Robot Meta<select name="robot_meta" onchange="const custom=this.form.elements.robot_meta_other;custom.parentElement.hidden=this.value!==\'Other\';custom.required=this.value===\'Other\'"><option value="">Choose Robot Meta</option>';
-  foreach(pitChoicesWithSaved($choices,'robot_meta',$meta) as $option)echo '<option value="'.h($option).'"'.($meta===$option?' selected':'').'>'.h($option).'</option>';
-  echo '</select></label><label'.($meta==='Other'?'':' hidden').'>Custom Robot Meta<input name="robot_meta_other" type="text" maxlength="80" value="'.h($d['robot_meta_other']??'').'"'.($meta==='Other'?' required':'').'></label>';
-  $suggestions=['Swerve','Tank','Mecanum','West Coast Drive'];
-  foreach(query('SELECT data FROM pit WHERE event_id=?',[$e['id']]) as $saved){$value=trim((string)((json_decode($saved['data'],true)?:[])['drivetrain']??''));if($value!==''&&!in_array($value,$suggestions,true))$suggestions[]=$value;}
-  echo '<label>Drivetrain<input name="drivetrain" list="drivetrain-options" maxlength="80" value="'.field($d,'drivetrain').'" placeholder="Select or type a drivetrain"></label><datalist id="drivetrain-options">';
-  foreach($suggestions as $option)echo '<option value="'.h($option).'"></option>';echo '</datalist>';
-  echo '<fieldset class="pit-measurements"><legend>Dimensions (inches)</legend><div class="pit-field-row">';
-  foreach(['width'=>'Width','length'=>'Length','height'=>'Height'] as $key=>$label)echo '<label>'.h($label).'<input name="'.h($key).'" type="text" inputmode="decimal" maxlength="20" value="'.field($d,$key).'" placeholder="in"></label>';
-  echo '</div></fieldset><label class="pit-weight">Weight (lbs)<input name="weight_lbs" type="text" inputmode="decimal" maxlength="20" value="'.field($d,'weight_lbs').'" placeholder="lbs"></label>';
-  foreach(['intake'=>'Intake','shooter_type'=>'Shooter Type'] as $key=>$label){echo '<label>'.h($label).'<select name="'.h($key).'"><option value="">Choose '.h($label).'</option>';foreach(pitChoicesWithSaved($choices,$key,(string)($d[$key]??'')) as $option)echo '<option value="'.h($option).'"'.(($d[$key]??'')===$option?' selected':'').'>'.h($option).'</option>';echo '</select></label>';}
-  $tags=pitTags($d);$tagOptions=$choices['tags'];foreach($tags as $tag)if(!in_array($tag,$tagOptions,true))$tagOptions[]=$tag;
-  echo '<fieldset class="pit-tags"><legend>Tag Management</legend><div class="pit-tag-picker"><label>Add a tag<select id="pitTagChoice"><option value="">Choose tag</option>';
-  foreach($tagOptions as $tag)echo '<option value="'.h($tag).'" data-color="'.h(tagColor($tag)).'">'.h($tag).'</option>';
-  echo '</select></label><button type="button" id="pitTagAdd">Add tag</button></div><div id="pitSelectedTags" class="pit-selected-tags">';
-  foreach($tags as $tag)echo '<span class="team-tag"'.tagStyle($tag).' data-tag="'.h($tag).'"><input type="hidden" name="tags[]" value="'.h($tag).'"><span>'.h($tag).'</span><button type="button" class="pit-tag-remove" aria-label="Remove '.h($tag).'">×</button></span>';
-  echo '</div><small>Select up to 12 tags. Admins manage the choices under Admin.</small><p id="pitTagsStatus" role="status"></p></fieldset><script src="'.h(asset('pit-tags.js')).'" defer></script>';
-  echo '<label>Autonomous Notes<textarea name="autonomous">'.field($d,'autonomous').'</textarea></label>';
-  foreach(['driver_experience'=>'Driver Experience Level','human_player_experience'=>'Human Player Experience Level'] as $key=>$label){echo '<label>'.h($label).'<select name="'.h($key).'"><option value="">Choose level</option>';foreach(pitChoicesWithSaved($choices,$key,(string)($d[$key]??'')) as $option)echo '<option value="'.h($option).'"'.(($d[$key]??'')===$option?' selected':'').'>'.h($option).'</option>';echo '</select></label>';}
-  foreach(['endgame'=>'Endgame','strategy'=>'Preferred strategy','reliability'=>'Reliability','requirements'=>'Special requirements','notes'=>'Notes'] as $k=>$label)echo '<label>'.h($label).'<textarea name="'.h($k).'">'.field($d,$k).'</textarea></label>';
-  echo '<button>Save pit record</button></form><p><a href="/?p=team&n='.h($n).'">View team profile</a></p>';
+  $fields=pitFields();
+  echo '<h2>Pit scouting</h2><form method="post" action="/?p=pit" enctype="multipart/form-data" class="dynamic-pit-form">'.csrf().'<input type="hidden" name="team" value="'.h($n).'"><input type="hidden" name="schema_version" value="'.h(pitFieldVersion($fields)).'">';
+  foreach($fields as $f)renderPitField($f,$d,$n,$photo?:null);
+  if(!$fields)echo '<p>No pit fields configured. An admin can add fields in Admin → Pit Scouting Configuration.</p>';
+  echo '<button>Save pit record</button></form><p><a href="/?p=team&n='.h($n).'">View team profile</a></p><script src="'.h(asset('pit-field-form.js')).'" defer></script>';
  }else{
   echo '<p><a class="button" href="/?p=pit&n='.h($n).'">Pit Scout</a></p>';
   if($photo)echo '<img class="pit-photo" src="/?p=robot_photo&n='.h($n).'&v='.rawurlencode($photo['uploaded_at']).'" alt="Robot photo for team '.h($n).'">';
@@ -703,10 +700,7 @@ elseif($p==='team'||$p==='pit'){
   if($paths)echo '<p>Each match has its own color. Paths are drawn over the same field image.</p><canvas id="teamPathsCanvas" width="800" height="480" data-paths="'.h(json_encode($paths)).'" aria-label="Combined autonomous paths for team '.h($n).'"></canvas><div id="pathLegend" class="path-legend"></div>';
   else echo '<p>No autonomous paths have been saved for this team yet.</p>';
   echo '</section><h2>Pit notes</h2><section>';
-  if(robotMeta($d)!=='')echo '<p><b>Robot Meta:</b> '.h(robotMeta($d)).'</p>';
-  if($tags=pitTags($d)){echo '<p><b>Tags:</b> <span class="team-tags">';foreach($tags as $tag)echo '<span class="team-tag"'.tagStyle($tag).'>'.h($tag).'</span>';echo '</span></p>';}
-  $pitLabels=['drivetrain'=>'Drivetrain','width'=>'Width','length'=>'Length','height'=>'Height','weight_lbs'=>'Weight','intake'=>'Intake','shooter_type'=>'Shooter type','autonomous'=>'Autonomous Notes','endgame'=>'Endgame','strategy'=>'Preferred strategy','reliability'=>'Reliability','requirements'=>'Special requirements','notes'=>'Notes','driver_experience'=>'Driver Experience Level','human_player_experience'=>'Human Player Experience Level'];
-  foreach($pitLabels as $key=>$label)if(($d[$key]??'')!=='')echo '<p><b>'.h($label).':</b> '.h($d[$key]).(in_array($key,['width','length','height'],true)?' in':($key==='weight_lbs'?' lbs':'')).'</p>';
+  renderPitProfile(pitFields(),$d);
   if(!$d)echo '<p>No pit record yet.</p>';echo '</section><h2>Match reports</h2>';
   foreach($reports as $r){$v=json_decode($r['data'],true)?:[];echo '<section><b>'.h(matchLabel($r)).' '.h($r['position']).'</b><p>'.h($v['notes']??'').'</p></section>';}
   echo '<script src="'.h(asset('auto-path.js')).'" defer></script>';
