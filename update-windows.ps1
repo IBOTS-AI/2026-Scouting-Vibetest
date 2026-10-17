@@ -22,6 +22,7 @@ $files = @(
     'public/battery-management.php',
     'public/battery-page.php',
     'public/battery-page.js',
+    'public/battery-ships.json',
     'public/pit-fields.php',
     'public/pit-field-builder.js',
     'public/pit-field-form.js',
@@ -67,6 +68,7 @@ $checks = @{
     'public/battery-management.php' = '/var/www/html/battery-management.php'
     'public/battery-page.php' = '/var/www/html/battery-page.php'
     'public/battery-page.js' = '/var/www/html/battery-page.js'
+    'public/battery-ships.json' = '/var/www/html/battery-ships.json'
     'public/pit-fields.php' = '/var/www/html/pit-fields.php'
     'public/pit-field-builder.js' = '/var/www/html/pit-field-builder.js'
     'public/pit-field-form.js' = '/var/www/html/pit-field-form.js'

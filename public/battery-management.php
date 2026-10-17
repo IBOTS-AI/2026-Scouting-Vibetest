@@ -20,8 +20,8 @@ function batteryNumber($value,string $label,float $min,float $max,bool $integer=
  return (float)$value;
 }
 function validateBattery(array $post): array {
- $data=[];foreach(['label'=>80,'brand'=>100,'model'=>100,'serial_number'=>120,'notes'=>10000] as $key=>$max)$data[$key]=batteryText($post,$key,$max,$key==='label');
- foreach(['purchased_on','in_service_on'] as $key)$data[$key]=batteryDate($post,$key);
+ $data=[];foreach(['label'=>80,'brand'=>100,'model'=>100,'notes'=>10000] as $key=>$max)$data[$key]=batteryText($post,$key,$max,$key==='label');
+ foreach(['purchased_on'] as $key)$data[$key]=batteryDate($post,$key);
  $data['rated_ah']=batteryNumber($post['rated_ah']??'','rated capacity',0.01,1000);return $data;
 }
 function validateBatteryCheck(array $post): array {
@@ -48,7 +48,7 @@ function batteryPost(string $action,string $uid): void {
    if($old&&($_POST['version']??'')!==$old['updated_at'])throw new InvalidArgumentException('This battery changed. Reload before saving your edits.');
    if(query('SELECT id FROM batteries WHERE lower(label)=lower(?) AND id<>?::uuid',[$data['label'],$batteryId?:'00000000-0000-0000-0000-000000000000'])->fetchColumn())throw new InvalidArgumentException('That battery label is already in use, including retired batteries.');
    $batteryId=$batteryId?:uuid();
-   query('INSERT INTO batteries(id,label,brand,model,serial_number,purchased_on,in_service_on,rated_ah,notes,created_by) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET label=EXCLUDED.label,brand=EXCLUDED.brand,model=EXCLUDED.model,serial_number=EXCLUDED.serial_number,purchased_on=EXCLUDED.purchased_on,in_service_on=EXCLUDED.in_service_on,rated_ah=EXCLUDED.rated_ah,notes=EXCLUDED.notes,updated_at=now()',[$batteryId,$data['label'],$data['brand'],$data['model'],$data['serial_number'],$data['purchased_on'],$data['in_service_on'],$data['rated_ah'],$data['notes'],$uid]);
+   query('INSERT INTO batteries(id,label,brand,model,purchased_on,rated_ah,notes,created_by) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET label=EXCLUDED.label,brand=EXCLUDED.brand,model=EXCLUDED.model,purchased_on=EXCLUDED.purchased_on,rated_ah=EXCLUDED.rated_ah,notes=EXCLUDED.notes,updated_at=now()',[$batteryId,$data['label'],$data['brand'],$data['model'],$data['purchased_on'],$data['rated_ah'],$data['notes'],$uid]);
    batteryAudit('battery',$batteryId,$uid,$old?:null,query('SELECT * FROM batteries WHERE id=?',[$batteryId])->fetch(PDO::FETCH_ASSOC));
    db()->commit();$_SESSION['flash']='Battery saved.';
   }elseif($action==='battery_status'){
@@ -75,3 +75,31 @@ function batteryPost(string $action,string $uid): void {
 }
 function batteryDisplay($number,string $suffix=''): string {return $number===null||$number===''?'—':h(rtrim(rtrim(number_format((float)$number,2,'.',''),'0'),'.')).($suffix!==''?' '.h($suffix):'');}
 function batteryBadge(string $condition): string {$class=['OK'=>'ok','Monitor'=>'monitor','Needs attention'=>'attention','Not assessed'=>'unknown','active'=>'ok','retired'=>'retired'][$condition]??'unknown';return '<span class="battery-badge '.$class.'">'.h(ucfirst($condition)).'</span>';}
+function batteryShipCatalog(): array {
+ static $ships;if($ships!==null)return $ships;
+ $path=__DIR__.'/battery-ships.json';if(!is_file($path))return $ships=[];
+ $data=json_decode(file_get_contents($path),true);return $ships=is_array($data['ships']??null)?$data['ships']:[];
+}
+function batteryShipName(string $label): string {
+ $label=strtolower(strtr($label,['ō'=>'o','Ō'=>'O','ū'=>'u','Ū'=>'U']));
+ $label=trim(preg_replace('/[^a-z0-9]+/',' ',$label));
+ $label=preg_replace('/\b(?:uss|hms|ijn|kms|km|fs|rn|battery|batt|bty|battleship)\b/',' ',$label);
+ $label=preg_replace('/\bbb\s*\d+\b|\bb\d+\b/',' ',$label);
+ $label=trim(preg_replace('/\s+/',' ',$label));
+ return trim(preg_replace('/^\d+\s*|\s+\d+$/','',$label));
+}
+function batteryShip(string $label): ?array {
+ $name=batteryShipName($label);if($name==='')return null;
+ static $matches;if($matches===null){$matches=[];foreach(batteryShipCatalog() as $key=>$ship)foreach($ship['aliases'] as $alias){$normalized=batteryShipName($alias);$matches[$normalized]=array_merge($ship,['key'=>$key]);}}
+ return $matches[$name]??null;
+}
+function batteryShipImageUrl(array $ship): string {return '/?p=battery_ship&ship='.rawurlencode($ship['key']).'&v='.substr(hash('sha256',$ship['image_base64']),0,12);}
+function batteryShipThumbnail(string $label,bool $large=false): string {
+ $ship=batteryShip($label);$class='battery-ship-thumb'.($large?' large':'');
+ if(!$ship)return '<span class="'.h($class).' battery-ship-empty" role="img" aria-label="No ship photo matched for '.h($label).'">No ship<br>photo</span>';
+ return '<img class="'.h($class).'" src="'.h(batteryShipImageUrl($ship)).'" width="'.($large?'180':'92').'" height="'.($large?'108':'60').'" alt="'.h($ship['title']).'" title="'.h($ship['title']).'" loading="lazy">';
+}
+function batteryShipCredit(string $label): string {
+ $ship=batteryShip($label);if(!$ship)return '';
+ return '<p class="battery-help battery-ship-credit">'.h($ship['title']).' · '.h($ship['artist']).' · <a href="'.h($ship['source']).'" target="_blank" rel="noopener noreferrer">Photo source</a> · <a href="'.h($ship['license_url']).'" target="_blank" rel="noopener noreferrer">'.h($ship['license']).'</a></p>';
+}

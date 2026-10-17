@@ -5,8 +5,8 @@ function batteryInput(array $data,string $key,string $label,string $type='text',
 function renderBatteryEditor(array $battery,array $draft=[]): void {
  $values=$draft?:$battery;$id=$battery['id']??'';
  echo '<form method="post" action="/?p=battery_save" class="battery-editor">'.csrf().'<input type="hidden" name="id" value="'.h($id).'"><input type="hidden" name="version" value="'.h($battery['updated_at']??'').'"><div class="battery-form-grid">';
- batteryInput($values,'label','Battery label','text','required maxlength="80" placeholder="B01"');batteryInput($values,'brand','Brand','text','maxlength="100"');batteryInput($values,'model','Model','text','maxlength="100"');batteryInput($values,'serial_number','Serial number','text','maxlength="120"');batteryInput($values,'purchased_on','Purchase date','date');batteryInput($values,'in_service_on','First service date','date');batteryInput($values,'rated_ah','Rated capacity (Ah)','number','min="0.01" max="1000" step="0.01"');
- echo '</div><label>Battery notes<textarea name="notes" aria-label="Battery notes" maxlength="10000" rows="3">'.h(batteryValue($values,'notes')).'</textarea></label><button>Save battery</button></form>';
+ batteryInput($values,'label','Battery label','text','required maxlength="80" placeholder="USS Arizona"');batteryInput($values,'brand','Brand','text','maxlength="100"');batteryInput($values,'model','Model','text','maxlength="100"');batteryInput($values,'purchased_on','Purchase date','date');batteryInput($values,'rated_ah','Rated capacity (Ah)','number','min="0.01" max="1000" step="0.01"');
+ echo '</div><p class="battery-help">Ship photos match the battery label automatically, for example Arizona, USS Missouri, or B01 - Iowa.</p><label>Battery notes<textarea name="notes" aria-label="Battery notes" maxlength="10000" rows="3">'.h(batteryValue($values,'notes')).'</textarea></label><button>Save battery</button></form>';
 }
 $draft=$_SESSION['battery_draft']??null;unset($_SESSION['battery_draft']);
 $id=$_GET['id']??'';$battery=false;
@@ -16,7 +16,7 @@ if($id!==''){
 }
 page($battery?'Battery '.$battery['label']:'Batteries',true,false);
 echo '<div class="battery-page"><div class="battery-header"><div>';
-if($battery)echo '<a href="/?p=batteries">← All batteries</a><h1>'.h($battery['label']).' '.batteryBadge($battery['status']).'</h1><p>'.h(trim($battery['brand'].' '.$battery['model'])).($battery['serial_number']!==''?' · Serial '.h($battery['serial_number']):'').'</p>';
+if($battery)echo '<a href="/?p=batteries">← All batteries</a><div class="battery-ship-heading">'.batteryShipThumbnail($battery['label'],true).'<div><h1>'.h($battery['label']).' '.batteryBadge($battery['status']).'</h1><p>'.h(trim($battery['brand'].' '.$battery['model'])).'</p></div></div>';
 else echo '<h1>Batteries</h1><p>Inventory, performance checks, and service history across all events.</p>';
 echo '</div>';if(!$battery&&batteryManager())echo '<a class="button" href="/?p=batteries&new=1#battery-editor">+ Add battery</a>';echo '</div>';
 if(!$battery){
@@ -29,13 +29,13 @@ if(!$battery){
  $sql.=" FROM batteries b LEFT JOIN LATERAL (SELECT recorded_on,condition FROM battery_checks c WHERE c.battery_id=b.id ORDER BY recorded_on DESC,created_at DESC,id DESC LIMIT 1) last_check ON true";
  if($status!=='all')$sql.=' WHERE b.status=?';$sql.=' ORDER BY lower(b.label),b.id';
  $rows=query($sql,$status==='all'?[]:[$status])->fetchAll(PDO::FETCH_ASSOC);
- echo '<section><div class="battery-toolbar"><form method="get"><input type="hidden" name="p" value="batteries"><label>Show<select name="status" onchange="this.form.submit()">';foreach(['active'=>'Active batteries','retired'=>'Retired batteries','all'=>'All batteries'] as $value=>$label)echo '<option value="'.h($value).'"'.($status===$value?' selected':'').'>'.h($label).'</option>';echo '</select></label><noscript><button>Apply</button></noscript></form><label>Find a battery<input id="batterySearch" type="search" placeholder="Label, brand, model, or serial number"></label></div>';
+ echo '<section><div class="battery-toolbar"><form method="get"><input type="hidden" name="p" value="batteries"><label>Show<select name="status" onchange="this.form.submit()">';foreach(['active'=>'Active batteries','retired'=>'Retired batteries','all'=>'All batteries'] as $value=>$label)echo '<option value="'.h($value).'"'.($status===$value?' selected':'').'>'.h($label).'</option>';echo '</select></label><noscript><button>Apply</button></noscript></form><label>Find a battery<input id="batterySearch" type="search" placeholder="Ship name, brand, or model"></label></div>';
  if(!$rows)echo '<p class="battery-empty">'.($counts['total']?'No batteries in this view.':'No batteries yet. An admin or mentor can add your first battery.').'</p>';
  else{
   echo '<p class="battery-help">Metrics show each battery’s latest recorded value. Open a battery for dates and its full history. Click a column heading to sort.</p><div class="scroll"><table id="batteryTable"><thead><tr>';
   foreach(['Battery','Status','Latest check','Condition','Resting (V)','Resistance (mΩ)','Capacity (Ah)','Checks'] as $i=>$label)echo '<th scope="col"><button type="button" data-battery-sort="'.h($i).'"'.($i===0?' aria-label="Sort by battery label"':'').'>'.h($label).'</button></th>';
   echo '</tr></thead><tbody>';
-  foreach($rows as $row){echo '<tr data-battery-search="'.h(strtolower(implode(' ',array_map(fn($key)=>(string)$row[$key],['label','brand','model','serial_number'])))).'"'.($row['status']==='retired'?' class="battery-retired"':'').'><td data-sort="'.h($row['label']).'"><a href="/?p=batteries&id='.h($row['id']).'"><strong>'.h($row['label']).'</strong></a><small>'.h(trim($row['brand'].' '.$row['model'])).'</small></td><td>'.batteryBadge($row['status']).'</td><td>'.h($row['recorded_on']??'—').'</td><td>'.($row['condition']?batteryBadge($row['condition']):'—').'</td>';foreach(['resting_voltage','resistance','capacity'] as $key)echo '<td data-sort="'.h($row[$key]??'').'">'.batteryDisplay($row[$key]).'</td>';echo '<td data-sort="'.h($row['checks']).'">'.h($row['checks']).'</td></tr>';}
+  foreach($rows as $row){echo '<tr data-battery-search="'.h(strtolower(implode(' ',array_map(fn($key)=>(string)$row[$key],['label','brand','model'])))).'"'.($row['status']==='retired'?' class="battery-retired"':'').'><td data-sort="'.h($row['label']).'"><div class="battery-identity">'.batteryShipThumbnail($row['label']).'<div><a href="/?p=batteries&id='.h($row['id']).'"><strong>'.h($row['label']).'</strong></a><small>'.h(trim($row['brand'].' '.$row['model'])).'</small></div></div></td><td>'.batteryBadge($row['status']).'</td><td>'.h($row['recorded_on']??'—').'</td><td>'.($row['condition']?batteryBadge($row['condition']):'—').'</td>';foreach(['resting_voltage','resistance','capacity'] as $key)echo '<td data-sort="'.h($row[$key]??'').'">'.batteryDisplay($row[$key]).'</td>';echo '<td data-sort="'.h($row['checks']).'">'.h($row['checks']).'</td></tr>';}
   echo '</tbody></table></div><p id="batterySearchStatus" role="status"></p>';
  }
  echo '</section>';
@@ -44,7 +44,8 @@ if(!$battery){
  foreach($history as &$check)$check['values']=json_decode($check['readings'],true)?:[];unset($check);
  $latest=[];foreach($history as $check)foreach(batteryMetricFields() as $key=>$definition)if(!isset($latest[$key])&&isset($check['values'][$key])&&is_numeric($check['values'][$key]))$latest[$key]=['value'=>$check['values'][$key],'date'=>$check['recorded_on']];
  if($battery['status']==='retired')echo '<aside class="notice">Retired '.h(substr($battery['retired_at']??'',0,10)).' · '.nl2br(h($battery['retirement_note'])).'. History and checks remain available.</aside>';
- echo '<section><h2>Battery details</h2><div class="battery-detail-grid"><p><b>Purchase date</b><br>'.h($battery['purchased_on']??'—').'</p><p><b>First service</b><br>'.h($battery['in_service_on']??'—').'</p><p><b>Rated capacity</b><br>'.batteryDisplay($battery['rated_ah'],'Ah').'</p><p><b>Recorded checks</b><br>'.count($history).'</p></div>';
+ echo '<section><h2>Battery details</h2><div class="battery-detail-grid"><p><b>Purchase date</b><br>'.h($battery['purchased_on']??'—').'</p><p><b>Rated capacity</b><br>'.batteryDisplay($battery['rated_ah'],'Ah').'</p><p><b>Recorded checks</b><br>'.count($history).'</p></div>';
+ echo batteryShipCredit($battery['label']);
  if($battery['notes']!=='')echo '<p class="battery-notes">'.nl2br(h($battery['notes'])).'</p>';
  if(batteryManager()){
   echo '<details class="admin-rollup" id="battery-editor"'.(($draft['action']??'')==='battery_save'?' open':'').'><summary>Edit battery</summary><div class="pit-editor-body">';renderBatteryEditor($battery,($draft['action']??'')==='battery_save'?$draft['data']:[]);echo '</div></details>';

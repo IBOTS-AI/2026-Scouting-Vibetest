@@ -635,6 +635,11 @@ if($p==='field_image'){
  if(!$image){http_response_code(404);header('Cache-Control: private, no-store');exit;}
  header('Content-Type: '.$image['mime']);header('X-Content-Type-Options: nosniff');header('Cache-Control: private, no-cache');echo base64_decode($image['photo_base64']);exit;
 }
+if($p==='battery_ship'){
+ $key=$_GET['ship']??'';$ships=batteryShipCatalog();$ship=is_string($key)?($ships[$key]??null):null;
+ if(!$ship){http_response_code(404);exit;}
+ header('Content-Type: '.$ship['image_mime']);header('X-Content-Type-Options: nosniff');header('Cache-Control: private, max-age=86400');echo base64_decode($ship['image_base64']);exit;
+}
 if($p==='robot_photo'){ $num=(int)($_GET['n']??0);$photo=$e?query('SELECT mime,photo_base64 FROM team_photos WHERE event_id=? AND team_number=?',[$e['id'],$num])->fetch(PDO::FETCH_ASSOC):false;if(!$photo){http_response_code(404);exit;}header('Content-Type: '.$photo['mime']);header('X-Content-Type-Options: nosniff');header('Cache-Control: private, max-age=300');echo base64_decode($photo['photo_base64']);exit;}
 if($p==='home'){page('Dashboard',true,false);echo '<aside class="warn">Cloud sync is not configured. Local entries remain in PostgreSQL; remote backup is not active.</aside>';if($e){
  $teams=query('SELECT number,name FROM teams WHERE event_id=? ORDER BY number',[$e['id']])->fetchAll(PDO::FETCH_ASSOC);
