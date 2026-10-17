@@ -337,10 +337,28 @@ function pathWidget(array $strokes,bool $editable): void {
  if($editable)echo '<input type="hidden" name="auto_path" id="autoPathInput" value="'.h(json_encode($strokes)).'"><div class="path-actions"><button type="button" id="pathUndo">Undo last stroke</button><button type="button" id="pathClear">Clear path</button></div>';
  echo '</div></section>';
 }
+function fieldImageForEvent(array $selected,bool $includeData=true): array|false {
+ $columns=$includeData?'i.event_id,i.uploaded_at,i.mime,i.photo_base64':'i.event_id,i.uploaded_at';
+ $args=[$selected['id']];$where='i.event_id=?';
+ if(preg_match('/^(\d{4})[a-z0-9]+$/i',(string)($selected['event_key']??''),$season)){$where='('.$where.' OR LEFT(e.event_key,4)=?)';$args[]=$season[1];}
+ $args[]=$selected['id'];
+ return query('SELECT '.$columns.' FROM event_field_images i JOIN events e ON e.id=i.event_id WHERE '.$where.' ORDER BY (i.event_id=?) DESC,i.uploaded_at DESC,i.event_id LIMIT 1',$args)->fetch(PDO::FETCH_ASSOC);
+}
+function fieldBackgroundUrl(?array $selected): ?string {
+ if(!$selected)return null;
+ static $urls=[];$key=$selected['id'];
+ if(array_key_exists($key,$urls))return $urls[$key];
+ $image=fieldImageForEvent($selected,false);
+ return $urls[$key]=$image?'/?p=field_image&event='.rawurlencode($image['event_id']).'&v='.rawurlencode($image['uploaded_at']):null;
+}
+function fieldBackgroundStyle(?array $selected): string {
+ $url=fieldBackgroundUrl($selected);
+ return '--field-background:'.($url?'url("'.$url.'")':'none');
+}
 function page(string $title,bool $wide=false,bool $showHeading=true): void {
  $active=$GLOBALS['e']??null;$settings=siteSettings();$year='';
  if($active&&preg_match('/^(\d{4})/',(string)($active['event_key']??''),$match))$year=$match[1];
- echo '<!doctype html><html lang="en"'.(picked($settings['dark_mode'])?' class="dark-mode"':'').'><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h($title).' · '.h($settings['site_title']).'</title><link rel="stylesheet" href="'.h(asset('style.css')).'"><header><div class="header-identity">';
+ echo '<!doctype html><html lang="en" style="'.h(fieldBackgroundStyle($active)).'"'.(picked($settings['dark_mode'])?' class="dark-mode"':'').'><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h($title).' · '.h($settings['site_title']).'</title><link rel="stylesheet" href="'.h(asset('style.css')).'"><header><div class="header-identity">';
  if($settings['logo_uploaded_at'])echo '<img class="site-logo" src="/?p=site_logo&v='.rawurlencode($settings['logo_uploaded_at']).'" alt="Scouting logo">';
  echo '<strong>'.h($settings['site_title']).'</strong></div>'.($active?'<span class="selected-event">Selected Event: '.h(trim($year.' '.$active['name'])).'</span>':'<span class="selected-event" aria-hidden="true"></span>').'<details class="nav-menu" id="navigationMenu"><summary aria-label="Navigation menu"><span aria-hidden="true">☰</span><span class="sr-only">Menu</span></summary><nav aria-label="Main navigation"><a href="/?p=home">Dashboard</a><a href="/?p=matches">Matches</a><a href="/?p=pit_display">Pit Display</a><a href="/?p=teams">Pit Scouting</a><a href="/?p=strategy">Strategy</a><a href="/?p=picks">Pick List</a><a href="/?p=admin">Admin</a><a href="/?p=logout">Log out</a></nav></details></header><script src="'.h(asset('navigation.js')).'" defer></script><main'.($wide?' class="wide"':'').'>'.($showHeading?'<h1>'.h($title).'</h1>':'');
  if(isset($_SESSION['flash'])) {echo '<aside class="'.h($_SESSION['flash_type']??'notice').'">'.h($_SESSION['flash']).'</aside>';unset($_SESSION['flash'],$_SESSION['flash_type']);}
@@ -604,7 +622,17 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
 if(!isset($_SESSION['user'])) {if(isset($_SESSION['flash'])){$loginNotice='<aside class="notice">'.h($_SESSION['flash']).'</aside>';unset($_SESSION['flash'],$_SESSION['flash_type']);}else $loginNotice='';echo '<!doctype html><html lang="en"'.(picked(siteSettings()['dark_mode'])?' class="dark-mode"':'').'><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h(siteSettings()['site_title']).' · Sign in</title><link rel="stylesheet" href="'.h(asset('style.css')).'"><main><h1>'.h(siteSettings()['site_title']).' sign in</h1>'.$loginNotice.'<form method="post" action="/?p=login"><label>Username<input name="name" required autofocus></label><label>Password<input name="password" type="password" required></label><button>Sign in</button></form><p>First run: admin / change-me-now. Change this password before use.</p></main></html>';exit;}
 $e=event();
 if($p==='site_logo'){$logo=query('SELECT logo_mime,logo_base64 FROM site_settings WHERE id=1')->fetch(PDO::FETCH_ASSOC);if(!$logo||!$logo['logo_base64']){http_response_code(404);exit;}header('Content-Type: '.$logo['logo_mime']);header('X-Content-Type-Options: nosniff');header('Cache-Control: private, no-cache');echo base64_decode($logo['logo_base64']);exit;}
-if($p==='field_image'){$image=$e?query('SELECT mime,photo_base64 FROM event_field_images WHERE event_id=?',[$e['id']])->fetch(PDO::FETCH_ASSOC):false;if(!$image){http_response_code(404);exit;}header('Content-Type: '.$image['mime']);header('X-Content-Type-Options: nosniff');header('Cache-Control: private, no-cache');echo base64_decode($image['photo_base64']);exit;}
+if($p==='field_image'){
+ $selected=$e;
+ if(isset($_GET['event'])){
+  $id=$_GET['event'];
+  if(!is_string($id)||!preg_match('/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i',$id)){http_response_code(404);exit;}
+  $selected=query('SELECT id,event_key FROM events WHERE id=?',[$id])->fetch(PDO::FETCH_ASSOC);
+ }
+ $image=$selected?fieldImageForEvent($selected):false;
+ if(!$image){http_response_code(404);header('Cache-Control: private, no-store');exit;}
+ header('Content-Type: '.$image['mime']);header('X-Content-Type-Options: nosniff');header('Cache-Control: private, no-cache');echo base64_decode($image['photo_base64']);exit;
+}
 if($p==='robot_photo'){ $num=(int)($_GET['n']??0);$photo=$e?query('SELECT mime,photo_base64 FROM team_photos WHERE event_id=? AND team_number=?',[$e['id'],$num])->fetch(PDO::FETCH_ASSOC):false;if(!$photo){http_response_code(404);exit;}header('Content-Type: '.$photo['mime']);header('X-Content-Type-Options: nosniff');header('Cache-Control: private, max-age=300');echo base64_decode($photo['photo_base64']);exit;}
 if($p==='home'){page('Dashboard',true,false);echo '<aside class="warn">Cloud sync is not configured. Local entries remain in PostgreSQL; remote backup is not active.</aside>';if($e){
  $teams=query('SELECT number,name FROM teams WHERE event_id=? ORDER BY number',[$e['id']])->fetchAll(PDO::FETCH_ASSOC);

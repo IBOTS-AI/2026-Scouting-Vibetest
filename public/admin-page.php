@@ -49,7 +49,8 @@ echo '<form method="post" action="/?p=upload_logo" enctype="multipart/form-data"
 
 echo '<section class="admin-section" id="year-configuration"><h2>Year Specific Configuration</h2><h3 id="field-background">Field Background</h3>';
 if($e){
- if(query('SELECT count(*) FROM event_field_images WHERE event_id=?',[$e['id']])->fetchColumn())echo '<img class="field-preview" src="/?p=field_image" alt="Current field background">';
+ if($backgroundUrl=fieldBackgroundUrl($e))echo '<img class="field-preview" src="'.h($backgroundUrl).'" alt="Current field background">';
+ echo '<p>Events without their own image reuse the most recently uploaded field background from the same season. Uploading here sets an image for this event.</p>';
  echo '<form method="post" action="/?p=upload_field" enctype="multipart/form-data">'.csrf().'<label>Field image<input type="file" name="field_image" accept="image/jpeg,image/png,image/webp" required></label><small>JPEG, PNG, or WebP, up to 4 MB.</small><button>Upload field image</button></form>';
 }else echo '<p>Select an event to configure its field background.</p>';
 echo '</section>';
