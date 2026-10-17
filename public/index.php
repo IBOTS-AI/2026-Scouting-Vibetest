@@ -282,7 +282,7 @@ function pitTagColors(): array {
 }
 function tagColor(string $tag): string {
  $defaults=['Defense'=>'#d9edff','Passing'=>'#fff0c6','L3 Climber'=>'#eee3ff','Offense'=>'#ffe1e4'];
- $color=pitTagColors()[$tag]??($defaults[$tag]??'#d9f3f0');return is_string($color)&&preg_match('/^#[0-9a-fA-F]{6}$/',$color)?$color:'#d9f3f0';
+ $color=pitTagColors()[$tag]??($defaults[$tag]??'#d9f3f0');foreach(pitFields() as $field)if($field['type']==='tags'&&isset($field['colors'][$tag])){$color=$field['colors'][$tag];break;}return is_string($color)&&preg_match('/^#[0-9a-fA-F]{6}$/',$color)?$color:'#d9f3f0';
 }
 function tagStyle(string $tag): string {
  $color=tagColor($tag);$r=hexdec(substr($color,1,2));$g=hexdec(substr($color,3,2));$b=hexdec(substr($color,5,2));
@@ -463,7 +463,7 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
    $existing=pitFields();
    if(($_POST['schema_version']??'')!==pitFieldVersion($existing))throw new InvalidArgumentException('The field configuration changed. Reload Admin before editing again.');
    $fields=validatePitFields(json_decode((string)($_POST['field_schema']??''),true,512,JSON_THROW_ON_ERROR),$existing);
-   $extra=[];foreach($fields as $f)if($f['id']==='tags'&&$f['type']==='tags')$extra['tags']=$f['options'];
+   $extra=[];foreach($fields as $f)if($f['id']==='tags'&&$f['type']==='tags'){$extra['tags']=$f['options'];$extra['tag_colors']=array_replace(pitTagColors(),$f['colors']??[]);}
    query("UPDATE site_settings SET pit_choices=jsonb_set(pit_choices,'{fields}',?::jsonb,true) || ?::jsonb WHERE id=1",[json_encode($fields,JSON_THROW_ON_ERROR),json_encode((object)$extra,JSON_THROW_ON_ERROR)]);
    db()->commit();$_SESSION['flash_type']='success';$_SESSION['flash']='Pit fields saved in the selected order. Existing records retained.';
   }catch(InvalidArgumentException|JsonException $ex){if(db()->inTransaction())db()->rollBack();$_SESSION['flash']=$ex->getMessage();}
@@ -487,7 +487,7 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
   $removed=[];foreach(pitChoiceFields() as $key=>[$label])foreach(array_diff($old[$key],$choices[$key]) as $value){[$pitCount,$matchCount]=pitChoiceUsage($key,$value);if($pitCount+$matchCount)$removed[]=$label.' “'.$value.'” ('.$pitCount.' pit records, '.$matchCount.' match reports)';}
   if($removed&&($_POST['acknowledge_removal']??'')!=='1'){http_response_code(409);exit('Confirm removal of choices in use. Existing records will be retained: '.implode('; ',$removed));}
    $savedConfig=pitFieldConfig();
-  if(isset($savedConfig['fields']))foreach($savedConfig['fields'] as &$configuredField)if($configuredField['id']==='tags'&&$configuredField['type']==='tags')$configuredField['options']=$choices['tags'];unset($configuredField);
+  if(isset($savedConfig['fields']))foreach($savedConfig['fields'] as &$configuredField)if($configuredField['id']==='tags'&&$configuredField['type']==='tags'){$configuredField['options']=$choices['tags'];$configuredField['colors']=array_intersect_key($colors,array_flip($choices['tags']));}unset($configuredField);
   $choices=array_merge($savedConfig,$choices);$choices['tag_colors']=$colors;
   query('UPDATE site_settings SET pit_choices=? WHERE id=1',[json_encode($choices,JSON_THROW_ON_ERROR)]);
   $_SESSION['flash_type']='success';$_SESSION['flash']=($scope==='tags'?'Tag Management':'Pit Scouting Configuration').' updated. Existing scouting records were not changed.';go($scope==='tags'?'admin#tag-management':'admin#pit-choices');

@@ -25,7 +25,13 @@ function validatePitFields($fields,array $existing): array {
   $values=[];$lower=[];
   foreach($options as $option){if(!is_string($option)||trim($option)===''||strlen($option)>80||!preg_match('//u',$option)||preg_match('/[\x00-\x1f\x7f]/',$option))throw new InvalidArgumentException('Choices must be 1–80 characters.');$option=trim($option);if(isset($lower[strtolower($option)]))throw new InvalidArgumentException('Remove duplicate choices.');$lower[strtolower($option)]=true;$values[]=$option;}
   if(in_array($type,['dropdown','multiselect','tags'],true)&&!$values)throw new InvalidArgumentException('Add at least one choice for '.trim($label).'.');
-  $seen[$id]=true;$clean[]=['id'=>$id,'label'=>trim($label),'type'=>$type,'options'=>$values];
+  $entry=['id'=>$id,'label'=>trim($label),'type'=>$type,'options'=>$values];
+  if(array_key_exists('colors',$f)){
+   if(!is_array($f['colors'])||count($f['colors'])>50)throw new InvalidArgumentException('Invalid option colors.');
+   $colors=[];foreach($f['colors'] as $option=>$color){if(!in_array((string)$option,$values,true)||!is_string($color)||!preg_match('/^#[0-9a-fA-F]{6}$/D',$color))throw new InvalidArgumentException('Choose a valid color for each option.');$colors[$option]=strtolower($color);}
+   $entry['colors']=$colors;
+  }
+  $seen[$id]=true;$clean[]=$entry;
  }
  return $clean;
 }
@@ -70,6 +76,12 @@ function pitImageSource($value): string {
  if(!is_array($value)||!in_array($value['mime']??null,['image/jpeg','image/png','image/webp'],true)||!is_string($value['base64']??null)||!preg_match('/^[A-Za-z0-9+\/=]+$/D',$value['base64']))return '';
  return 'data:'.$value['mime'].';base64,'.$value['base64'];
 }
+function pitOptionStyle(array $field,string $option): string {
+ $color=$field['colors'][$option]??null;
+ if(!is_string($color)||!preg_match('/^#[0-9a-fA-F]{6}$/D',$color))return tagStyle($option);
+ $r=hexdec(substr($color,1,2));$g=hexdec(substr($color,3,2));$b=hexdec(substr($color,5,2));
+ return ' style="background:'.h($color).';border-color:'.h($color).';color:'.(($r*299+$g*587+$b*114)/1000>150?'#172438':'#ffffff').'"';
+}
 function renderPitField(array $f,array $data,int $team,?array $photo): void {
  $id=$f['id'];$type=$f['type'];$v=$data[$id]??'';$name='fields['.$id.']';
  echo '<div class="pit-dynamic-field" data-field-id="'.h($id).'">';
@@ -81,13 +93,13 @@ function renderPitField(array $f,array $data,int $team,?array $photo): void {
  }elseif(in_array($type,['multiselect','tags'],true)){
   $selected=is_array($v)?array_filter($v,'is_string'):(is_string($v)&&$v!==''?[$v]:[]);
   echo '<fieldset class="pit-multi '.($type==='tags'?'pit-tag-options':'').'"><legend>'.h($f['label']).'</legend><div class="pit-option-grid">';
-  foreach(pitSavedOptions($f,$v) as $option)echo '<label'.($type==='tags'?tagStyle($option):'').'><input type="checkbox" name="'.h($name).'[]" value="'.h($option).'"'.(in_array($option,$selected,true)?' checked':'').'> '.h($option).'</label>';
+  foreach(pitSavedOptions($f,$v) as $option)echo '<label'.pitOptionStyle($f,$option).'><input type="checkbox" name="'.h($name).'[]" value="'.h($option).'"'.(in_array($option,$selected,true)?' checked':'').'> '.h($option).'</label>';
   echo '</div><small>Select all that apply.</small></fieldset>';
  }else{
   $v=is_scalar($v)?(string)$v:'';echo '<label>'.h($f['label']);
   if($type==='dropdown'){
    echo '<select name="'.h($name).'"'.($id==='robot_meta'?' data-robot-meta':'').'><option value="">Choose an option</option>';
-   foreach(pitSavedOptions($f,$v) as $option)echo '<option value="'.h($option).'"'.($v===$option?' selected':'').'>'.h($option).'</option>';
+   foreach(pitSavedOptions($f,$v) as $option)echo '<option value="'.h($option).'"'.pitOptionStyle($f,$option).($v===$option?' selected':'').'>'.h($option).'</option>';
    echo '</select>';
   }elseif($type==='textarea')echo '<textarea name="'.h($name).'" maxlength="10000">'.h($v).'</textarea>';
   else echo '<input name="'.h($name).'" type="'.($type==='number'?'number':'text').'"'.($type==='number'?' step="any"':' maxlength="1000"').' value="'.h($v).'">';
@@ -100,8 +112,9 @@ function renderPitProfile(array $fields,array $data): void {
  foreach($fields as $f){$v=$data[$f['id']]??'';if($f['id']==='robot_photo'||$v===''||$v===[]||$v===null)continue;
   echo '<div class="pit-profile-field"><b>'.h($f['label']).':</b> ';
   if($f['type']==='image'){if($src=pitImageSource($v))echo '<img class="pit-photo" src="'.h($src).'" alt="'.h($f['label']).'">';}
-  elseif(is_array($v)){foreach($v as $item)if(is_scalar($item))echo '<span class="team-tag"'.($f['type']==='tags'?tagStyle((string)$item):'').'>'.h($item).'</span>';}
-  else echo nl2br(h($f['id']==='robot_meta'&&$v==='Other'?($data['robot_meta_other']??$v):$v));
+  elseif(is_array($v)){foreach($v as $item)if(is_scalar($item))echo '<span class="team-tag"'.pitOptionStyle($f,(string)$item).'>'.h($item).'</span>';}
+  elseif($f['type']==='dropdown')echo '<span class="team-tag"'.pitOptionStyle($f,(string)$v).'>'.h($f['id']==='robot_meta'&&$v==='Other'?($data['robot_meta_other']??$v):$v).'</span>';
+  else echo nl2br(h($v));
   echo '</div>';
  }
 }

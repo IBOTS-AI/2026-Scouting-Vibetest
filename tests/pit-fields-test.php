@@ -19,6 +19,12 @@ $bad=$fields;$bad[0]['id']='notes';rejected(fn()=>validatePitFields($bad,[]),'Re
 $bad=$fields;$bad[0]['options']=['A','a'];rejected(fn()=>validatePitFields($bad,$defaults),'Reject duplicate choices');
 $bad=$fields;$bad[0]['type']='script';rejected(fn()=>validatePitFields($bad,$defaults),'Reject unknown type');
 $bad=$fields;$bad[0]['options']=[];rejected(fn()=>validatePitFields($bad,$defaults),'Reject empty choice list');
+$colored=$fields;$colored[4]['colors']=['A'=>'#FF8000','B'=>'#001122'];
+check(validatePitFields($colored,$fields)[4]['colors']['A']==='#ff8000','Normalize and preserve per-option colors');
+$bad=$colored;$bad[4]['colors']['A']='red;position:absolute';rejected(fn()=>validatePitFields($bad,$fields),'Reject CSS injection');
+$bad=$colored;$bad[4]['colors']['Unknown']='#aabbcc';rejected(fn()=>validatePitFields($bad,$fields),'Reject colors for unknown options');
+ob_start();renderPitField($colored[4],[],2370,null);$coloredHtml=ob_get_clean();check(str_contains($coloredHtml,'background:#FF8000')&&str_contains($coloredHtml,'color:#ffffff'),'Render multi-select colors with contrasting text');
+ob_start();renderPitProfile([$colored[4]],[$colored[4]['id']=>['B']]);$coloredProfile=ob_get_clean();check(str_contains($coloredProfile,'background:#001122'),'Profiles use field-specific colors');
 $previous=['removed_field'=>'keep me','robot_meta'=>'Other','robot_meta_other'=>'Old custom','tags'=>['Retired tag'],'old_image'=>['mime'=>'image/png','base64'=>'YWJj']];
 $post=[];foreach($fields as $f)$post[$f['id']]=match($f['type']){'dropdown'=>'A','multiselect','tags'=>['A','B'],'number'=>'0','text','textarea'=>'<script>alert(1)</script>',default=>''};
 $data=readPitValues($fields,$post,$previous);
