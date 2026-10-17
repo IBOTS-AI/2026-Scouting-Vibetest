@@ -15,21 +15,40 @@ function event(): ?array { return query('SELECT * FROM events WHERE active=true 
 function siteSettings(): array { static $settings;return $settings??=query('SELECT dark_mode,logo_mime,logo_uploaded_at,site_title,highlighted_team FROM site_settings WHERE id=1')->fetch(PDO::FETCH_ASSOC); }
 function teamNumber($number): string { $highlighted=(int)$number===(int)siteSettings()['highlighted_team'];return '<span class="team-number'.($highlighted?' highlighted-team':'').'"'.($highlighted?' title="Team running this scouting system"':'').'>'.h($number).'</span>'; }
 function field(array $d,string $k): string {return h($d[$k]??'');}
-function catalog(int $year,bool $refresh=false): array {
- $year=max(2015,min((int)date('Y')+1,$year));
- $cached=query('SELECT * FROM event_catalog WHERE year=? ORDER BY name',[$year])->fetchAll(PDO::FETCH_ASSOC);
+function parseEventCatalog(string $html,int $year,bool $offseason=false): array {
+ $events=[];
+ if($offseason){
+  preg_match_all('~<a\b[^>]*href="/'.$year.'/([A-Za-z0-9]+)"[^>]*>(.*?)</a>~si',$html,$found,PREG_SET_ORDER);
+  foreach($found as $m){
+   if(!preg_match('~<strong\b[^>]*>(.*?)</strong>~si',$m[2],$title))continue;
+   $location='';
+   if(preg_match('~<div class="col-4 d-none d-md-block">(.*?)</div>\s*</div>~si',$m[2],$details)){
+    preg_match_all('~<div\b[^>]*>([^<]*)</div>~si',$details[1].'</div>',$lines);
+    $location=trim(end($lines[1])?:'');
+   }
+   $events[]=['code'=>strtoupper($m[1]),'name'=>html_entity_decode(trim(strip_tags($title[1])),ENT_QUOTES|ENT_HTML5,'UTF-8'),'location'=>html_entity_decode($location,ENT_QUOTES|ENT_HTML5,'UTF-8')];
+  }
+ }else{
+  preg_match_all('~<a\s+href="/'.$year.'/([A-Za-z0-9]+)"\s+title="Event Information">([^<]+)</a>\s*<span id="detail2">\s*<br\s*/>\s*([^<]+)</span>~si',$html,$found,PREG_SET_ORDER);
+  foreach($found as $m)$events[]=['code'=>strtoupper($m[1]),'name'=>html_entity_decode(trim($m[2]),ENT_QUOTES|ENT_HTML5,'UTF-8'),'location'=>html_entity_decode(trim($m[3]),ENT_QUOTES|ENT_HTML5,'UTF-8')];
+ }
+ return $events;
+}
+function catalog(int $year,bool $refresh=false,bool $offseason=false): array {
+ $year=max(2015,min((int)date('Y')+1,$year));$season=$offseason?'true':'false';
+ $cached=query('SELECT * FROM event_catalog WHERE year=? AND offseason=? ORDER BY name',[$year,$season])->fetchAll(PDO::FETCH_ASSOC);
  if($refresh || !$cached) {
   $ctx=stream_context_create(['http'=>['timeout'=>12,'user_agent'=>'2370 Scouting local prototype (event selector)']]);
-  $html=@file_get_contents("https://frc-events.firstinspires.org/$year/Events/EventList",false,$ctx);
-  if($html && preg_match_all('~<a\s+href="/'.$year.'/([A-Za-z0-9]+)"\s+title="Event Information">([^<]+)</a>\s*<span id="detail2">\s*<br\s*/>\s*([^<]+)</span>~si',$html,$found,PREG_SET_ORDER)) {
-   foreach($found as $m) {
-    $name=html_entity_decode(trim($m[2]),ENT_QUOTES|ENT_HTML5,'UTF-8');
-    $location=html_entity_decode(trim($m[3]),ENT_QUOTES|ENT_HTML5,'UTF-8');
-    preg_match('/,\s*([A-Z]{2,3})\s+(?:USA|Canada)\s*$/',$location,$state);
-    query('INSERT INTO event_catalog(year,code,name,location,state_code,fetched_at) VALUES(?,?,?,?,?,now()) ON CONFLICT(year,code) DO UPDATE SET name=EXCLUDED.name,location=EXCLUDED.location,state_code=EXCLUDED.state_code,fetched_at=now()',[$year,strtoupper($m[1]),$name,$location,$state[1]??'']);
+  $path=$offseason?'events/OffSeason':'Events/EventList';
+  $html=@file_get_contents("https://frc-events.firstinspires.org/$year/$path",false,$ctx);
+  $found=$html?parseEventCatalog($html,$year,$offseason):[];
+  if($found) {
+   foreach($found as $item) {
+    preg_match('/,\s*([A-Z]{2,3})\s+(?:USA|Canada)\s*$/',$item['location'],$state);
+    query('INSERT INTO event_catalog(year,code,name,location,state_code,offseason,fetched_at) VALUES(?,?,?,?,?,?,now()) ON CONFLICT(year,code) DO UPDATE SET name=EXCLUDED.name,location=EXCLUDED.location,state_code=EXCLUDED.state_code,offseason=EXCLUDED.offseason,fetched_at=now()',[$year,$item['code'],$item['name'],$item['location'],$state[1]??'',$season]);
    }
-   $cached=query('SELECT * FROM event_catalog WHERE year=? ORDER BY name',[$year])->fetchAll(PDO::FETCH_ASSOC);
-  } elseif($refresh || !$cached) $_SESSION['flash']='Could not load the FIRST event list. Cached choices remain available if previously loaded.';
+   $cached=query('SELECT * FROM event_catalog WHERE year=? AND offseason=? ORDER BY name',[$year,$season])->fetchAll(PDO::FETCH_ASSOC);
+  } else $_SESSION['flash']='Could not load the FIRST '.($offseason?'offseason ':'').'event list. Cached choices remain available if previously loaded.';
  }
  return $cached;
 }

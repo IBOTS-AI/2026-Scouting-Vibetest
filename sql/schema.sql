@@ -31,3 +31,5 @@ ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS site_title text NOT NULL DEFA
 ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS pit_choices jsonb NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS highlighted_team integer NOT NULL DEFAULT 2370;
 INSERT INTO site_settings(id) VALUES(1) ON CONFLICT DO NOTHING;
+
+ALTER TABLE event_catalog ADD COLUMN IF NOT EXISTS offseason boolean NOT NULL DEFAULT false;

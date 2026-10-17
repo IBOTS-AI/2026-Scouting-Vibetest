@@ -2,24 +2,25 @@
 declare(strict_types=1);
 $settings=siteSettings();
 $year=max(2015,min((int)date('Y')+1,(int)($_GET['year']??date('Y'))));
-$refresh=isset($_GET['refresh']);$list=catalog($year,$refresh);$districtList=districts($year,$refresh);
-$type=in_array($_GET['type']??'district',['district','regional','worlds'],true)?($_GET['type']??'district'):'district';
-$district=(string)($_GET['district']??'NE');if(!in_array($district,array_column($districtList,'code'),true))$district=$districtList[0]['code']??'';
+$type=in_array($_GET['type']??'district',['district','regional','worlds','offseason'],true)?($_GET['type']??'district'):'district';
+$refresh=isset($_GET['refresh']);$list=catalog($year,$refresh,$type==='offseason');$districtList=$type==='district'?districts($year,$refresh):[];
+$district=(string)($_GET['district']??'NE');if($type==='district'&&!in_array($district,array_column($districtList,'code'),true))$district=$districtList[0]['code']??'';
 $allowed=$type==='district'&&$district?districtCodes($year,$district,$refresh):[];
-$filtered=array_values(array_filter($list,fn($item)=>$type==='district'?in_array($item['code'],$allowed,true):eventType($item['name'])===$type));
+$filtered=array_values(array_filter($list,fn($item)=>$type==='district'?in_array($item['code'],$allowed,true):($type==='offseason'||eventType($item['name'])===$type)));
 
 echo '<div class="admin-layout"><section class="admin-section" id="event-selection"><h2>Event Selection</h2><div class="admin-columns"><div><h3>Choose an event</h3>';
 if(!$list)echo '<aside class="warn">No event list is cached for this year. Check the server Internet connection and refresh the event list.</aside>';
 echo '<form method="get"><input type="hidden" name="p" value="admin"><div class="admin-field-row"><label>Year<select name="year" onchange="this.form.submit()">';
 for($y=(int)date('Y');$y>=2015;$y--)echo '<option value="'.h($y).'"'.($y===$year?' selected':'').'>'.h($y).'</option>';
 echo '</select></label><label>Competition type<select name="type" onchange="this.form.submit()">';
-foreach(['district'=>'Districts','regional'=>'Regionals','worlds'=>'Worlds'] as $value=>$label)echo '<option value="'.h($value).'"'.($value===$type?' selected':'').'>'.h($label).'</option>';
+foreach(['district'=>'Districts','regional'=>'Regionals','worlds'=>'Worlds','offseason'=>'Offseason'] as $value=>$label)echo '<option value="'.h($value).'"'.($value===$type?' selected':'').'>'.h($label).'</option>';
 echo '</select></label></div>';
 if($type==='district'){
  echo '<label>FIRST district<select name="district" onchange="this.form.submit()">';
  foreach($districtList as $item)echo '<option value="'.h($item['code']).'"'.($item['code']===$district?' selected':'').'>'.h($item['name']).'</option>';
  echo '</select></label>';
 }else echo '<input type="hidden" name="district" value="'.h($district).'">';
+if($type==='offseason')echo '<p>Offseason events listed by FIRST. Teams and matches are available when the organizer publishes them to FIRST.</p>';
 echo '</form><p>'.count($filtered).' events shown. <a href="/?p=admin&year='.h($year).'&type='.h($type).'&district='.h($district).'&refresh=1#event-selection">Refresh FIRST event list</a></p><form method="post" action="/?p=event">'.csrf().'<input type="hidden" name="year" value="'.h($year).'"><label>Event<select name="event_code" required><option value="">Choose an event</option>';
 foreach($filtered as $item)echo '<option value="'.h($item['code']).'">'.h($item['name']).' — '.h($item['location']).'</option>';
 echo '</select></label><button'.(!$filtered?' disabled':'').'>Select event</button></form></div><div>';
